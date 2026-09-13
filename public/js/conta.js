@@ -44,12 +44,21 @@ async function route() {
   } catch (e) { $('#view').innerHTML = `<div class="empty"><div class="e">😕</div><p>${esc(e.message)}</p></div>`; }
 }
 const stTag = s => `<span class="st st-${s}">${STATUS[s] || s}</span>`;
+const ST_ICONS = { aguardando_arte: '🎨', em_analise: '🔍', aprovado: '✅', em_producao: '🖨️', enviado: '🚚', entregue: '📦', cancelado: '❌' };
+function shipETA(o) {
+  if (/retirada/i.test(o.shippingType || '')) return 'retire na loja quando pronto 🏪';
+  if (!['enviado', 'entregue'].includes(o.status)) return 'após o envio';
+  const ev = [...o.timeline].reverse().find(t => t.status === 'enviado');
+  if (!ev) return 'em breve';
+  const n = /sedex/i.test(o.shippingType || '') ? 4 : /pac/i.test(o.shippingType || '') ? 8 : 5;
+  return fmtDate(new Date(new Date(ev.at).getTime() + n * 864e5).toISOString());
+}
 function timeline(o) {
   const idx = FLOW.indexOf(o.status);
   return `<div class="tl">${o.timeline.map(t => {
     const i = FLOW.indexOf(t.status);
     const cls = o.status === 'cancelado' ? '' : (i < idx || (o.status === t.status) ? (t.status === o.status ? 'now' : 'done') : '');
-    return `<div class="ev ${cls}"><b>${STATUS[t.status] || t.status}</b><span>${fmtDT(t.at)}${t.note ? ' — ' + esc(t.note) : ''}</span></div>`;
+    return `<div class="ev ${cls}"><b>${ST_ICONS[t.status] || '•'} ${STATUS[t.status] || t.status}</b><span>${fmtDT(t.at)}${t.note ? ' — ' + esc(t.note) : ''}</span></div>`;
   }).join('')}</div>`;
 }
 
@@ -80,15 +89,15 @@ function viewHome() {
     ${ORDERS.filter(o => o.status === 'aguardando_arte').length ? `<div class="panel" style="border-left:4px solid var(--warn)"><b>⚠️ Você tem pedido(s) aguardando arte!</b> <span class="mut">Envie para não atrasar a produção.</span> <a class="link-more" href="#/pedidos">Enviar agora →</a></div>` : ''}
     ${spendChart()}
     <div class="panel"><h3>🕘 Últimos pedidos</h3>
-      ${ORDERS.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Total</th><th>Status</th><th></th></tr>
-      ${ORDERS.slice(0, 5).map(o => `<tr><td><b>${o.code}</b></td><td>${fmtDate(o.createdAt)}</td><td>${o.items.map(i => i.icon + ' ' + esc(i.name)).join('<br>')}</td><td><b>${BRL(o.total)}</b></td><td>${stTag(o.status)}</td><td><a class="btn sm ghost" href="#/pedido?id=${o.id}">Ver</a></td></tr>`).join('')}</table></div>`
+      ${ORDERS.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Total</th><th>Previsão</th><th>Status</th><th></th></tr>
+      ${ORDERS.slice(0, 5).map(o => `<tr><td><b>${o.code}</b></td><td>${fmtDate(o.createdAt)}</td><td>${o.items.map(i => i.icon + ' ' + esc(i.name)).join('<br>')}</td><td><b>${BRL(o.total)}</b></td><td>${o.status === 'entregue' ? '✅' : o.status === 'enviado' ? shipETA(o) : '—'}</td><td>${stTag(o.status)}</td><td><a class="btn sm ghost" href="#/pedido?id=${o.id}">Ver</a></td></tr>`).join('')}</table></div>`
       : `<div class="empty"><div class="e">📦</div><p>Você ainda não fez pedidos.<br><a class="btn" href="/produtos.html">Começar agora</a></p></div>`}</div>`;
 }
 
 /* ---------- Pedidos ---------- */
 function viewOrders() {
   $('#view').innerHTML = `
-    <div class="main-hd"><div><h1>📦 Meus pedidos</h1><p>${ORDERS.length} pedido(s) • clique para ver detalhes e enviar artes</p></div></div>
+    <div class="main-hd"><div><h1>📦 Meus pedidos</h1><p>${ORDERS.length} pedido(s) • ${BRL(ORDERS.filter(o => o.status !== 'cancelado').reduce((s, o) => s + o.total, 0))} em compras • clique para detalhes</p></div></div>
     <div class="tabs"><button data-f="" class="on" onclick="filterOrders('',this)">Todos</button><button data-f="aguardando_arte" onclick="filterOrders('aguardando_arte',this)">Aguard. arte</button><button data-f="em_producao" onclick="filterOrders('em_producao',this)">Em produção</button><button data-f="enviado" onclick="filterOrders('enviado',this)">Enviados</button><button data-f="entregue" onclick="filterOrders('entregue',this)">Entregues</button></div>
     <input class="inp" id="order-q" placeholder="Buscar por codigo ou produto..." oninput="filterOrders(curTab())" style="max-width:320px;margin-bottom:10px"><div class="panel" id="orders-box"></div>`;
   filterOrders('');
@@ -113,11 +122,13 @@ function viewOrderDetail(id) {
       <button class="btn navy" style="margin-left:auto" onclick='reorder(${JSON.stringify(o.id)})'>🔁 Repetir pedido</button></div>
     <div class="grid2">
       <div class="panel"><h3>📍 Acompanhamento</h3>${timeline(o)}
-        ${o.tracking ? `<p>🚚 <b>Rastreio:</b> <span class="mono">${esc(o.tracking)}</span> <button class="btn sm ghost" onclick="toast('Pacote a caminho! 📦 Previsão: 3 dias úteis','ok')">Rastrear</button></p>` : ''}
+        ${o.tracking ? `<p>🚚 <b>Rastreio:</b> <span class="mono">${esc(o.tracking)}</span> <a class="btn sm navy" target="_blank" href="https://www2.correios.com.br/sistemas/rastreamento/resultado.cfm?objetos=${o.tracking}">Rastrear nos Correios →</a> <button class="btn sm ghost" onclick="navigator.clipboard?.writeText('${o.tracking}');toast('Código copiado!','ok')">Copiar</button></p>` : ''}
+        <p>📅 <b>Previsão de entrega:</b> ${shipETA(o)}</p>
         <h3 style="margin-top:16px">🧾 Itens</h3>${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span><span>${i.qty.toLocaleString('pt-BR')} un × ${BRL(i.unit)}</span>${o.status === 'entregue' ? ` <a class="link-more small" href="/produto.html?id=${i.productId}">⭐ Avaliar</a>` : ''}</div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
         <div class="totals" style="margin-top:10px"><div class="tt"><span>Subtotal</span><span>${BRL(o.subtotal)}</span></div>
         ${o.discount ? `<div class="tt"><span>Desconto ${o.coupon ? '(' + o.coupon + ')' : ''}</span><b style="color:var(--ok)">−${BRL(o.discount)}</b></div>` : ''}
         ${o.pointsDiscount ? `<div class="tt"><span>Pontos usados (${o.pointsUsed})</span><b style="color:var(--ok)">−${BRL(o.pointsDiscount)}</b></div>` : ''}
+        ${o.status === 'entregue' ? `<div class="tt"><span>🎁 Pontos ganhos</span><b>+${Math.max(0, Math.floor((o.subtotal || 0) - (o.discount || 0)))}</b></div>` : ''}
         <div class="tt"><span>Frete (${o.shippingType})</span><span>${o.shipping ? BRL(o.shipping) : 'GRÁTIS 🎉'}</span></div>
         <div class="tt gt"><span>Total</span><span>${BRL(o.total)}</span></div></div></div>
       <div>
@@ -168,7 +179,7 @@ async function reorder(id) {
 /* ---------- Artes ---------- */
 function viewFiles() {
   const arts = ORDERS.filter(o => o.art?.file || o.status === 'aguardando_arte');
-  $('#view').innerHTML = `<div class="main-hd"><div><h1>🎨 Minhas artes</h1><p>Arquivos enviados e pendências por pedido</p></div></div>
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>🎨 Minhas artes</h1><p>Arquivos enviados e pendências • <a class="link-more" href="/pagina.html?p=gabaritos">📐 Baixar gabaritos</a></p></div></div>
   <div class="panel">${arts.length ? `<table class="tbl"><tr><th>Pedido</th><th>Arquivo</th><th>Status</th><th></th></tr>
     ${arts.map(o => `<tr><td><b>${o.code}</b><br><span class="small mut">${o.items.map(i => esc(i.name)).join(', ')}</span></td>
     <td>${o.art?.file ? `📎 ${esc(o.art.originalName || 'arquivo')}` : '<span class="mut">— pendente —</span>'}</td>
@@ -231,7 +242,8 @@ function viewProfile() {
   <div class="panel"><h3>🔐 Trocar senha</h3><form onsubmit="savePass(event)">
     <label class="lbl">Senha atual</label><input class="inp" name="current" type="password" required>
     <div style="margin-top:8px"><label class="lbl">Nova senha</label><input class="inp" name="next" type="password" required minlength="6"></div>
-    <button class="btn navy" style="margin-top:10px">Trocar senha</button></form></div></div>`;
+    <button class="btn navy" style="margin-top:10px">Trocar senha</button></form></div></div>
+  <div class="panel"><h3>📊 Seu resumo</h3><p>🎂 Cliente desde <b>${fmtDate(u.createdAt)}</b><br>📦 <b>${ORDERS.length}</b> pedidos • ✅ <b>${ORDERS.filter(o => o.status === 'entregue').length}</b> entregues<br>💰 Total em compras: <b>${BRL(ORDERS.filter(o => o.status !== 'cancelado').reduce((s, o) => s + o.total, 0))}</b> • 🎟️ Economizado: <b>${BRL(Math.round(ORDERS.reduce((s, o) => s + (o.discount || 0) + (o.pointsDiscount || 0), 0) * 100) / 100)}</b><br>🎁 Saldo: <b>${u.points || 0} pontos</b></p></div>`;
 }
 async function saveProfile(e) { e.preventDefault(); const f = e.target; const u = await api('/api/auth/me', { method: 'PUT', body: JSON.stringify({ name: f.name.value, phone: f.phone.value, cpf: f.cpf.value }) }); Auth.set({ token: Auth.token, user: u }); toast('Dados atualizados! ✅', 'ok'); renderSide('dados'); }
 async function savePass(e) { e.preventDefault(); const f = e.target; await api('/api/auth/password', { method: 'POST', body: JSON.stringify({ current: f.current.value, next: f.next.value }) }); toast('Senha trocada! 🔐', 'ok'); f.reset(); }
