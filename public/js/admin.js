@@ -22,6 +22,7 @@ function renderSide(active, badges = {}) {
       <a href="#/categorias" class="${active === 'categorias' ? 'on' : ''}">🗂️ Categorias</a>
       <a href="#/clientes" class="${active === 'clientes' ? 'on' : ''}">👥 Clientes</a>
       <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
+      <a href="#/banners" class="${active === 'banners' ? 'on' : ''}">🖼️ Banners</a>
       <a href="#/relatorios" class="${active === 'relatorios' ? 'on' : ''}">📈 Relatórios</a>
       <a href="#/mensagens" class="${active === 'mensagens' ? 'on' : ''}">✉️ Mensagens ${badges.msg ? `<span class="n">${badges.msg}</span>` : ''}</a>
       <a href="#/config" class="${active === 'config' ? 'on' : ''}">⚙️ Configurações</a>
@@ -44,6 +45,7 @@ async function route() {
     if (path === 'categorias') return viewCategories();
     if (path === 'clientes') return viewCustomers();
     if (path === 'cupons') return viewCoupons();
+    if (path === 'banners') return viewBanners();
     if (path === 'relatorios') return viewReports();
     if (path === 'mensagens') return viewMessages();
     if (path === 'config') return viewConfig();
@@ -112,7 +114,7 @@ function viewOrderDetail(id) {
         <div style="margin-top:10px"><label class="lbl">📝 Observação interna</label><input class="inp" id="nnote" placeholder="Ex: cliente avisado no WhatsApp"></div>
         <h3 style="margin-top:18px">🧾 Itens • ${BRL(o.total)}</h3>
         ${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
-        <p class="small mut">Subtotal ${BRL(o.subtotal)} • Desconto ${BRL(o.discount)} ${o.coupon ? '(' + o.coupon + ')' : ''} • Frete ${BRL(o.shipping)} (${o.shippingType}) • Pagto: ${o.payment.method} (${o.payment.status})</p>
+        <p class="small mut">Subtotal ${BRL(o.subtotal)} • Desconto ${BRL(o.discount)} ${o.coupon ? '(' + o.coupon + ')' : ''} • Frete ${BRL(o.shipping)} (${o.shippingType}) • Pagto: ${o.payment.method} (<b>${o.payment.status}</b>) <button class="btn sm ${o.payment.status === 'paid' ? 'ok' : 'navy'}" onclick="togglePay('${o.id}','${o.payment.status === 'paid' ? 'pending' : 'paid'}')">${o.payment.status === 'paid' ? '✓ Pago' : 'Marcar como pago'}</button></p>
         <p class="small">📍 ${esc(o.address?.street || '')} — ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} • CEP ${esc(o.address?.zip || '')}</p>
         <button class="btn sm ghost" onclick="toast('Etiqueta enviada para impressão! 🖨️','ok')">🖨️ Imprimir etiqueta</button></div>
       <div>
@@ -139,6 +141,10 @@ async function reviewArt(id, approved) {
 }
 
 /* ---------- PRODUÇÃO (kanban) ---------- */
+async function togglePay(id, to) {
+  await api(`/api/orders/${id}/pay`, { method: 'PUT', body: JSON.stringify({ status: to }) });
+  toast('Pagamento atualizado! 💳', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id);
+}
 function viewKanban() {
   const cols = ['em_analise', 'aprovado', 'em_producao', 'pronto_envio', 'enviado'];
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🏭 Produção</h1><p>Arraste mentalmente: troque o status pelo seletor do cartão</p></div></div>
@@ -159,7 +165,7 @@ async function viewProducts() {
   ${PRODUCTS.map(p => `<tr><td><span class="t-ic" style="background:linear-gradient(135deg,${p.grad[0]},${p.grad[1]})">${thumbHTML(p)}</span><b>${esc(p.name)}</b>${p.badge ? ` <span class="badge sale">${esc(p.badge)}</span>` : ''}<br><span class="small mut">${esc(p.tagline || '')}</span></td>
     <td>${esc(CATS.find(c => c.id === p.category)?.name || p.category)}</td><td><b>${BRL(Math.min(...p.quantities.map(q => q.price)))}</b></td><td>${(p.sold || 0).toLocaleString('pt-BR')}</td>
     <td>${p.active !== false ? '<span class="badge ok">Ativo</span>' : '<span class="badge mut">Inativo</span>'}</td>
-    <td style="white-space:nowrap"><button class="btn sm ghost" onclick="editProduct('${p.id}')">✏️</button> <button class="btn sm ghost" onclick="toggleProduct('${p.id}',${p.active === false})">${p.active === false ? '✅' : '⏸️'}</button> <button class="btn sm danger" onclick="delProduct('${p.id}')">🗑️</button></td></tr>`).join('')}</table></div></div>`;
+    <td style="white-space:nowrap"><button class="btn sm ghost" title="Duplicar" onclick="dupProduct('${p.id}')">📋</button> <button class="btn sm ghost" onclick="editProduct('${p.id}')">✏️</button> <button class="btn sm ghost" onclick="toggleProduct('${p.id}',${p.active === false})">${p.active === false ? '✅' : '⏸️'}</button> <button class="btn sm danger" onclick="delProduct('${p.id}')">🗑️</button></td></tr>`).join('')}</table></div></div>`;
 }
 function editProduct(id) {
   const p = PRODUCTS.find(x => x.id === id) || { name: '', category: CATS[1]?.id || '', icon: '🖨️', grad: ['#0B1E3B', '#1E5AA8'], tagline: '', desc: '', badge: '', quantities: [{ qty: 100, price: 49.9 }, { qty: 500, price: 99.9 }] };
@@ -168,7 +174,7 @@ function editProduct(id) {
     <div class="row2"><div><label class="lbl">Nome</label><input class="inp" name="name" value="${esc(p.name)}" required></div>
     <div><label class="lbl">Categoria</label><select class="inp" name="category">${CATS.map(c => `<option value="${c.id}" ${c.id === p.category ? 'selected' : ''}>${c.icon} ${esc(c.name)}</option>`).join('')}</select></div></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Ícone (emoji)</label><input class="inp" name="icon" value="${esc(p.icon || '🖨️')}"></div>
-    <div><label class="lbl">Selo (opcional)</label><input class="inp" name="badge" value="${esc(p.badge || '')}" placeholder="Ex: Oferta, Novo"></div></div>
+    <div><label class="lbl">Selo (opcional)</label><input class="inp" name="badge" value="${esc(p.badge || '')}" placeholder="Ex: Oferta, Novo"></div></div><div class="row2" style="margin-top:8px"><div><label class="lbl">🎨 Cor fundo 1</label><input type="color" class="inp" name="grad0" value="${esc(p.grad?.[0] || '#0B1E3B')}" style="height:44px;padding:4px;cursor:pointer"></div><div><label class="lbl">🎨 Cor fundo 2</label><input type="color" class="inp" name="grad1" value="${esc(p.grad?.[1] || '#FF4D00')}" style="height:44px;padding:4px;cursor:pointer"></div></div><div style="margin-top:10px"><label style="font-weight:700;font-size:14px"><input type="checkbox" name="active" ${p.active !== false ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Produto ativo (visível na loja)</label></div>
     <div style="margin-top:8px"><label class="lbl">Chamada curta</label><input class="inp" name="tagline" value="${esc(p.tagline || '')}"></div>
     <div style="margin-top:8px"><label class="lbl">Descrição</label><textarea class="inp" name="desc" rows="2">${esc(p.desc || '')}</textarea></div>
     <div style="margin-top:8px"><label class="lbl">Tabela de quantidades (qty:preço, separados por vírgula)</label><input class="inp mono" name="quantities" value="${p.quantities.map(q => q.qty + ':' + q.price).join(', ')}"></div><div style="margin-top:8px"><label class="lbl">📷 Foto do produto</label><div id="ep-imgprev">${p.img ? `<img src="${p.img}" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-bottom:8px">` : ''}</div><div class="row2"><div><label class="filebox" style="display:block;padding:12px">📤 <b>Enviar foto</b><input type="file" hidden accept="image/*" onchange="epUpload(this)"></label></div><div><input class="inp" name="img" value="${esc(p.img || '')}" placeholder="ou cole a URL da imagem"></div></div></div>
@@ -181,10 +187,12 @@ async function saveProduct(e, id) {
   const body = { name: f.name.value, category: f.category.value, icon: f.icon.value, badge: f.badge.value, tagline: f.tagline.value, desc: f.desc.value, quantities };
   const imgVal = (f.img.value || '').trim();
   if (imgVal) body.img = imgVal;
+  body.grad = [f.grad0.value, f.grad1.value];
+  body.active = f.active.checked;
   if (id) await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify(body) });
   else {
     const base = PRODUCTS[0];
-    await api('/api/products', { method: 'POST', body: JSON.stringify({ ...body, grad: ['#0B1E3B', '#FF4D00'], formats: base.formats, papers: base.papers, colors: base.colors, finishes: base.finishes, deadlines: base.deadlines }) });
+    await api('/api/products', { method: 'POST', body: JSON.stringify({ ...body, formats: base.formats, papers: base.papers, colors: base.colors, finishes: base.finishes, deadlines: base.deadlines }) });
   }
   closeModal(); toast('Produto salvo! ✅', 'ok'); viewProducts();
 }
@@ -199,6 +207,13 @@ async function epUpload(input) {
     toast('Foto enviada! \uD83D\uDCF7', 'ok');
   } catch (e) { toast(e.message, 'err'); }
   input.value = '';
+}
+async function dupProduct(id) {
+  const p = PRODUCTS.find(x => x.id === id);
+  const c = { ...p }; delete c.id; delete c.sold; delete c.rating; delete c.createdAt;
+  c.name = p.name + ' (cópia)'; c.active = false;
+  await api('/api/products', { method: 'POST', body: JSON.stringify(c) });
+  toast('Produto duplicado como inativo! 📋', 'ok'); viewProducts();
 }
 async function toggleProduct(id, active) { await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify({ active }) }); viewProducts(); }
 async function delProduct(id) { if (!confirm('Excluir este produto?')) return; await api(`/api/products/${id}`, { method: 'DELETE' }); toast('Excluído 🗑️', 'ok'); viewProducts(); }
@@ -267,6 +282,40 @@ async function saveCoupon(e, id) {
   closeModal(); toast('Cupom salvo! 🎟️', 'ok'); viewCoupons();
 }
 async function delCoupon(id) { if (!confirm('Excluir cupom?')) return; await api(`/api/coupons/${id}`, { method: 'DELETE' }); viewCoupons(); }
+
+/* ---------- BANNERS ---------- */
+let BANNERS = [];
+async function viewBanners() {
+  BANNERS = await api('/api/admin/banners');
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>🖼️ Banners</h1><p>Slides da página inicial • edite e salve tudo</p></div>
+      <div style="margin-left:auto;display:flex;gap:8px"><button class="btn ghost" onclick="addBanner()">＋ Novo</button><button class="btn" onclick="saveBanners()">💾 Salvar tudo</button></div></div>
+    <div style="display:flex;flex-direction:column;gap:14px">${BANNERS.map((b, i) => `
+      <div class="panel" style="margin:0;${b.active === false ? 'opacity:.6' : ''}">
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:14px">
+          <div style="border-radius:12px;min-height:120px;background:linear-gradient(135deg,${b.grad[0]},${b.grad[1]});display:grid;place-items:center;font-size:44px;overflow:hidden">${b.img ? `<img src="${b.img}" style="width:100%;height:100%;object-fit:cover">` : esc(b.icon || '')}</div>
+          <div>
+            <div class="row2"><div><label class="lbl">Título</label><input class="inp" value="${esc(b.title)}" oninput="bannerSet(${i},'title',this.value)"></div>
+            <div><label class="lbl">Subtítulo</label><input class="inp" value="${esc(b.subtitle)}" oninput="bannerSet(${i},'subtitle',this.value)"></div></div>
+            <div class="row2" style="margin-top:8px"><div><label class="lbl">Texto do botão</label><input class="inp" value="${esc(b.cta)}" oninput="bannerSet(${i},'cta',this.value)"></div>
+            <div><label class="lbl">Link</label><input class="inp" value="${esc(b.link)}" oninput="bannerSet(${i},'link',this.value)"></div></div>
+            <div class="row2" style="margin-top:8px"><div><label class="lbl">Ícone (emoji)</label><input class="inp" value="${esc(b.icon || '')}" oninput="bannerSet(${i},'icon',this.value)"></div>
+            <div><label class="lbl">Foto (URL)</label><input class="inp" value="${esc(b.img || '')}" placeholder="/img/products/....jpg" oninput="bannerSet(${i},'img',this.value)"></div></div>
+            <div style="display:flex;gap:12px;margin-top:10px;align-items:center;flex-wrap:wrap">
+              <label class="small">🎨 <input type="color" value="${b.grad[0]}" oninput="bannerGrad(${i},0,this.value)"> cor 1</label>
+              <label class="small"><input type="color" value="${b.grad[1]}" oninput="bannerGrad(${i},1,this.value)"> cor 2</label>
+              <label class="small"><input type="checkbox" ${b.active !== false ? 'checked' : ''} onchange="bannerSet(${i},'active',this.checked)"> ativo</label>
+              <button class="btn sm danger" style="margin-left:auto" onclick="delBanner(${i})">🗑️ Excluir</button>
+            </div>
+          </div>
+        </div>
+      </div>`).join('')}</div>`;
+}
+function bannerSet(i, f, v) { BANNERS[i][f] = v; }
+function bannerGrad(i, k, v) { BANNERS[i].grad[k] = v; }
+function addBanner() { BANNERS.push({ id: 'b-' + Date.now(), title: 'Novo banner', subtitle: '', cta: 'Ver ofertas', link: '/produtos.html', grad: ['#0B1E3B', '#1E5AA8'], icon: '🖨️', img: '', active: true }); viewBanners(); }
+function delBanner(i) { if (confirm('Excluir este banner?')) { BANNERS.splice(i, 1); viewBanners(); } }
+async function saveBanners() { await api('/api/banners', { method: 'PUT', body: JSON.stringify({ banners: BANNERS }) }); toast('Banners salvos! 🖼️', 'ok'); }
 
 /* ---------- RELATÓRIOS ---------- */
 function viewReports() {

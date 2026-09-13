@@ -738,6 +738,14 @@ app.put('/api/admin/customers/:id', auth, admin, (req, res) => {
   if (req.body.active !== undefined) u.active = !!req.body.active;
   saveDB(); res.json({ ok: true });
 });
+app.get('/api/admin/banners', auth, admin, (req, res) => res.json(loadDB().banners));
+app.put('/api/orders/:id/pay', auth, admin, (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  o.payment.status = req.body.status === 'paid' ? 'paid' : 'pending';
+  o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Pagamento: ' + o.payment.status });
+  saveDB(); res.json(o);
+});
 /* Produtos / categorias / cupons / banners / config (admin) */
 app.post('/api/products', auth, admin, (req, res) => {
   const db = loadDB();
