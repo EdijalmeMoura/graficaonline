@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Entrar — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=3"></head>
+<body data-page="auth">
+<div id="site-header"></div>
+<div class="wrap">
+  <div class="auth">
+    <div class="tabs"><button class="on" onclick="authTab('login')">Entrar</button><button onclick="authTab('cad')">Criar conta</button></div>
+    <form id="f-login" onsubmit="doLogin(event)">
+      <h3>👋 Bem-vindo de volta!</h3>
+      <label class="lbl">E-mail</label><input class="inp" name="email" type="email" required placeholder="voce@email.com">
+      <div style="margin-top:10px"><label class="lbl">Senha</label><input class="inp" name="pass" type="password" required placeholder="••••••"></div>
+      <button class="btn big block" style="margin-top:16px">Entrar →</button>
+      <div class="demo">🧪 <b>Contas de demonstração:</b><br>👤 Cliente: <b>cliente@demo.com</b> / demo123<br>🛠️ Admin: <b>admin@primeprint.com.br</b> / admin123</div>
+    </form>
+    <form id="f-cad" style="display:none" onsubmit="doRegister(event)">
+      <h3>🎉 Crie sua conta grátis</h3>
+      <label class="lbl">Nome completo</label><input class="inp" name="name" required placeholder="Seu nome">
+      <div class="row2" style="margin-top:10px"><div><label class="lbl">E-mail</label><input class="inp" name="email" type="email" required></div>
+      <div><label class="lbl">Telefone/Whats</label><input class="inp" name="phone" placeholder="(81) 99999-9999"></div></div>
+      <div class="row2" style="margin-top:10px"><div><label class="lbl">CPF/CNPJ</label><input class="inp" name="cpf"></div>
+      <div><label class="lbl">Senha</label><input class="inp" name="pass" type="password" required minlength="6"></div></div>
+      <button class="btn big block" style="margin-top:16px">Criar conta e ganhar 10% OFF 🎟️</button>
+      <p class="small mut" style="text-align:center">Ao criar, você concorda com nossas políticas.</p>
+    </form>
+  </div>
+</div>
+<div id="site-footer"></div>
+<script src="/js/app.js?v=3"></script><script src="/js/shop.js?v=3"></script>
+</body></html>

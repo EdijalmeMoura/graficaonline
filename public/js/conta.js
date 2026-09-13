@@ -1,0 +1,206 @@
+/* ============ PrimePrint — Dashboard do cliente ============ */
+document.addEventListener('DOMContentLoaded', async () => {
+  await loadGlobals();
+  if (!Auth.user) { location.href = '/login.html?next=/conta.html'; return; }
+  if (Auth.user.role === 'admin') { location.href = '/admin.html'; return; }
+  try { const me = await api('/api/auth/me'); Auth.set({ token: Auth.token, user: me }); } catch { Auth.logout(); return; }
+  renderSide();
+  window.addEventListener('hashchange', route);
+  route();
+});
+let ORDERS = [];
+function renderSide(active = '') {
+  const u = Auth.user;
+  const pend = ORDERS.filter(o => !['entregue', 'cancelado'].includes(o.status)).length;
+  $('#side').innerHTML = `
+    <a class="logo" href="/index.html" style="color:#fff">${LOGO_SVG}<span>${esc(CONFIG.storeName || 'PrimePrint')}<small>MINHA CONTA</small></span></a>
+    <div class="who"><div class="av">${esc(u.name[0].toUpperCase())}</div><div><b>${esc(u.name.split(' ').slice(0, 2).join(' '))}</b><span>${esc(u.email)}</span></div></div>
+    <nav>
+      <a href="#/inicio" class="${active === 'inicio' ? 'on' : ''}">📊 Visão geral</a>
+      <a href="#/pedidos" class="${active === 'pedidos' ? 'on' : ''}">📦 Meus pedidos ${pend ? `<span class="n">${pend}</span>` : ''}</a>
+      <a href="#/arquivos" class="${active === 'arquivos' ? 'on' : ''}">🎨 Minhas artes</a>
+      <a href="#/enderecos" class="${active === 'enderecos' ? 'on' : ''}">📍 Endereços</a>
+      <a href="#/favoritos" class="${active === 'favoritos' ? 'on' : ''}">❤️ Favoritos</a>
+      <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
+      <a href="#/dados" class="${active === 'dados' ? 'on' : ''}">👤 Meus dados</a>
+      <a href="#" onclick="event.preventDefault();Auth.logout()">🚪 Sair</a>
+    </nav><a class="back" href="/index.html">← Voltar à loja</a>`;
+}
+async function route() {
+  const h = location.hash || '#/inicio';
+  const [_, path] = h.split('#/');
+  document.querySelector('.side')?.classList.remove('on');
+  try {
+    ORDERS = await api('/api/orders');
+    renderSide(path?.split('?')[0]);
+    if (path?.startsWith('pedido')) return viewOrderDetail(new URLSearchParams(path.split('?')[1]).get('id'));
+    if (path === 'pedidos') return viewOrders();
+    if (path === 'arquivos') return viewFiles();
+    if (path === 'enderecos') return viewAddresses();
+    if (path === 'favoritos') return viewFavs();
+    if (path === 'cupons') return viewCoupons();
+    if (path === 'dados') return viewProfile();
+    return viewHome();
+  } catch (e) { $('#view').innerHTML = `<div class="empty"><div class="e">😕</div><p>${esc(e.message)}</p></div>`; }
+}
+const stTag = s => `<span class="st st-${s}">${STATUS[s] || s}</span>`;
+function timeline(o) {
+  const idx = FLOW.indexOf(o.status);
+  return `<div class="tl">${o.timeline.map(t => {
+    const i = FLOW.indexOf(t.status);
+    const cls = o.status === 'cancelado' ? '' : (i < idx || (o.status === t.status) ? (t.status === o.status ? 'now' : 'done') : '');
+    return `<div class="ev ${cls}"><b>${STATUS[t.status] || t.status}</b><span>${fmtDT(t.at)}${t.note ? ' — ' + esc(t.note) : ''}</span></div>`;
+  }).join('')}</div>`;
+}
+
+/* ---------- Visão geral ---------- */
+function viewHome() {
+  const u = Auth.user;
+  const active = ORDERS.filter(o => !['entregue', 'cancelado'].includes(o.status));
+  const done = ORDERS.filter(o => o.status === 'entregue');
+  const saved = Math.round(ORDERS.reduce((s, o) => s + (o.discount || 0), 0) * 100) / 100;
+  const spent = ORDERS.filter(o => o.status !== 'cancelado').reduce((s, o) => s + o.total, 0);
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>Olá, ${esc(u.name.split(' ')[0])}! 👋</h1><p>Aqui você acompanha pedidos, artes e dados.</p></div>
+      <a class="btn" style="margin-left:auto" href="/produtos.html">🛍️ Fazer novo pedido</a></div>
+    <div class="kpis">
+      <div class="kpi"><div class="ki">📦</div><span>Pedidos ativos</span><b>${active.length}</b><small>em andamento</small></div>
+      <div class="kpi c2"><div class="ki">✅</div><span>Concluídos</span><b>${done.length}</b><small>entregues com sucesso</small></div>
+      <div class="kpi c3"><div class="ki">💰</div><span>Você economizou</span><b>${BRL(saved)}</b><small>em cupons e Pix</small></div>
+      <div class="kpi c4"><div class="ki">🎨</div><span>Artes pendentes</span><b>${ORDERS.filter(o => o.status === 'aguardando_arte').length}</b><small>aguardando envio</small></div>
+    </div>
+    ${ORDERS.filter(o => o.status === 'aguardando_arte').length ? `<div class="panel" style="border-left:4px solid var(--warn)"><b>⚠️ Você tem pedido(s) aguardando arte!</b> <span class="mut">Envie para não atrasar a produção.</span> <a class="link-more" href="#/pedidos">Enviar agora →</a></div>` : ''}
+    <div class="panel"><h3>🕘 Últimos pedidos</h3>
+      ${ORDERS.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Total</th><th>Status</th><th></th></tr>
+      ${ORDERS.slice(0, 5).map(o => `<tr><td><b>${o.code}</b></td><td>${fmtDate(o.createdAt)}</td><td>${o.items.map(i => i.icon + ' ' + esc(i.name)).join('<br>')}</td><td><b>${BRL(o.total)}</b></td><td>${stTag(o.status)}</td><td><a class="btn sm ghost" href="#/pedido?id=${o.id}">Ver</a></td></tr>`).join('')}</table></div>`
+      : `<div class="empty"><div class="e">📦</div><p>Você ainda não fez pedidos.<br><a class="btn" href="/produtos.html">Começar agora</a></p></div>`}</div>`;
+}
+
+/* ---------- Pedidos ---------- */
+function viewOrders() {
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>📦 Meus pedidos</h1><p>${ORDERS.length} pedido(s) • clique para ver detalhes e enviar artes</p></div></div>
+    <div class="tabs"><button data-f="" class="on" onclick="filterOrders('',this)">Todos</button><button data-f="aguardando_arte" onclick="filterOrders('aguardando_arte',this)">Aguard. arte</button><button data-f="em_producao" onclick="filterOrders('em_producao',this)">Em produção</button><button data-f="enviado" onclick="filterOrders('enviado',this)">Enviados</button><button data-f="entregue" onclick="filterOrders('entregue',this)">Entregues</button></div>
+    <div class="panel" id="orders-box"></div>`;
+  filterOrders('');
+}
+function filterOrders(s) {
+  $$('.tabs button').forEach(b => b.classList.toggle('on', b.textContent.toLowerCase().includes(s ? STATUS[s].split(' ')[0].toLowerCase() : 'todos')));
+  const list = s ? ORDERS.filter(o => o.status === s) : ORDERS;
+  $('#orders-box').innerHTML = list.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Pagamento</th><th>Total</th><th>Status</th><th></th></tr>
+    ${list.map(o => `<tr><td><b>${o.code}</b>${o.tracking ? `<br><span class="small mono">${esc(o.tracking)}</span>` : ''}</td><td>${fmtDate(o.createdAt)}</td>
+    <td>${o.items.map(i => `${i.icon} ${esc(i.name)} <span class="mut">(${i.qty.toLocaleString('pt-BR')} un)</span>`).join('<br>')}</td>
+    <td>${o.payment.method === 'pix' ? '⚡ Pix' : o.payment.method === 'card' ? '💳 Cartão' : '🧾 Boleto'} <span class="st st-${o.payment.status}">${o.payment.status === 'paid' ? 'pago' : 'pendente'}</span></td>
+    <td><b>${BRL(o.total)}</b></td><td>${stTag(o.status)}</td><td><a class="btn sm navy" href="#/pedido?id=${o.id}">Detalhes</a></td></tr>`).join('')}</table></div>`
+    : `<div class="empty"><div class="e">📭</div><p>Nenhum pedido neste filtro.</p></div>`;
+}
+function viewOrderDetail(id) {
+  const o = ORDERS.find(x => x.id === id);
+  if (!o) { location.hash = '#/pedidos'; return; }
+  $('#view').innerHTML = `
+    <div class="main-hd"><a class="btn sm ghost" href="#/pedidos">← Voltar</a><div><h1>Pedido ${o.code}</h1><p>Feito em ${fmtDT(o.createdAt)} • ${stTag(o.status)}</p></div>
+      <button class="btn navy" style="margin-left:auto" onclick='reorder(${JSON.stringify(o.id)})'>🔁 Repetir pedido</button></div>
+    <div class="grid2">
+      <div class="panel"><h3>📍 Acompanhamento</h3>${timeline(o)}
+        ${o.tracking ? `<p>🚚 <b>Rastreio:</b> <span class="mono">${esc(o.tracking)}</span> <button class="btn sm ghost" onclick="toast('Pacote a caminho! 📦 Previsão: 3 dias úteis','ok')">Rastrear</button></p>` : ''}
+        <h3 style="margin-top:16px">🧾 Itens</h3>${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span><span>${i.qty.toLocaleString('pt-BR')} un × ${BRL(i.unit)}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
+        <div class="totals" style="margin-top:10px"><div class="tt"><span>Subtotal</span><span>${BRL(o.subtotal)}</span></div>
+        ${o.discount ? `<div class="tt"><span>Desconto ${o.coupon ? '(' + o.coupon + ')' : ''}</span><b style="color:var(--ok)">−${BRL(o.discount)}</b></div>` : ''}
+        <div class="tt"><span>Frete (${o.shippingType})</span><span>${o.shipping ? BRL(o.shipping) : 'GRÁTIS 🎉'}</span></div>
+        <div class="tt gt"><span>Total</span><span>${BRL(o.total)}</span></div></div></div>
+      <div>
+        <div class="panel"><h3>🎨 Arte do pedido</h3>
+          ${o.art?.file ? `<p>📎 <a class="link-more" href="${o.art.file}" target="_blank">${esc(o.art.originalName || 'ver arquivo')}</a></p><p>Status: <span class="st st-${o.art.status}">${{ pending: 'pendente', in_review: 'em análise', approved: 'aprovada ✅', rejected: 'reprovada ❌' }[o.art.status]}</span></p>${o.art.feedback ? `<p class="small">💬 <b>Feedback:</b> ${esc(o.art.feedback)}</p>` : ''}` : `<p class="mut">Nenhuma arte enviada ainda.</p>`}
+          ${['aguardando_arte'].includes(o.status) || o.art?.status === 'rejected' ? `<label class="filebox" style="display:block;margin-top:10px">📤 <b>${o.art?.status === 'rejected' ? 'Reenviar arte corrigida' : 'Enviar arte agora'}</b><br><span class="small mut">PDF, JPG, PNG, AI, PSD, CDR — até 60MB</span><input type="file" hidden onchange="sendArt('${o.id}',this)"></label><div id="art-ok"></div>` : `<p class="small mut">✅ Arte recebida. Nossa equipe analisa antes de imprimir.</p>`}
+        </div>
+        <div class="panel"><h3>🚚 Entrega e pagamento</h3>
+          <p class="small">📍 ${esc(o.address?.street || '')} • ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} • CEP ${esc(o.address?.zip || '')}<br>🚚 ${o.shippingType} • 💳 ${o.payment.method === 'pix' ? 'Pix' : o.payment.method === 'card' ? 'Cartão' : 'Boleto'} (${o.payment.status === 'paid' ? 'pago ✅' : 'aguardando pagamento ⏳'})</p>
+          <button class="btn sm ghost" onclick="toast('Nota fiscal enviada para seu e-mail! 🧾','ok')">🧾 2ª via da NF</button></div>
+      </div>
+    </div>`;
+}
+async function sendArt(orderId, input) {
+  const f = input.files[0]; if (!f) return;
+  toast('Enviando... ⏳');
+  try {
+    const up = await uploadFile(f);
+    await api(`/api/orders/${orderId}/art`, { method: 'PUT', body: JSON.stringify({ url: up.url, name: up.name }) });
+    toast('Arte enviada! Nossa equipe vai analisar 🎨', 'ok');
+    ORDERS = await api('/api/orders'); viewOrderDetail(orderId);
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function reorder(id) {
+  const o = ORDERS.find(x => x.id === id);
+  for (const it of o.items) {
+    try {
+      const p = await api(`/api/products/${it.productId}`);
+      Cart.add({ productId: p.id, name: p.name, icon: p.icon, img: p.img || null, grad: p.grad, sel: { qty: String(it.qty) }, configLabel: it.config, qty: it.qty, unit: it.unit, total: it.total });
+    } catch { toast(`"${it.name}" não está mais disponível`, 'err'); }
+  }
+  toast('Itens adicionados ao carrinho! 🛒', 'ok');
+  location.href = '/carrinho.html';
+}
+
+/* ---------- Artes ---------- */
+function viewFiles() {
+  const arts = ORDERS.filter(o => o.art?.file || o.status === 'aguardando_arte');
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>🎨 Minhas artes</h1><p>Arquivos enviados e pendências por pedido</p></div></div>
+  <div class="panel">${arts.length ? `<table class="tbl"><tr><th>Pedido</th><th>Arquivo</th><th>Status</th><th></th></tr>
+    ${arts.map(o => `<tr><td><b>${o.code}</b><br><span class="small mut">${o.items.map(i => esc(i.name)).join(', ')}</span></td>
+    <td>${o.art?.file ? `📎 ${esc(o.art.originalName || 'arquivo')}` : '<span class="mut">— pendente —</span>'}</td>
+    <td><span class="st st-${o.art?.status || 'pending'}">${{ pending: 'pendente', in_review: 'em análise', approved: 'aprovada ✅', rejected: 'reprovada ❌' }[o.art?.status || 'pending']}</span>${o.art?.feedback ? `<br><span class="small">💬 ${esc(o.art.feedback)}</span>` : ''}</td>
+    <td><a class="btn sm navy" href="#/pedido?id=${o.id}">${o.art?.file ? 'Ver' : 'Enviar arte'}</a></td></tr>`).join('')}</table>`
+    : `<div class="empty"><div class="e">🎨</div><p>Nenhuma arte por aqui ainda.</p></div>`}</div>`;
+}
+
+/* ---------- Endereços ---------- */
+function viewAddresses() {
+  const addrs = Auth.user.addresses || [];
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>📍 Endereços</h1><p>Locais de entrega dos seus pedidos</p></div></div>
+  <div class="panel"><div class="addr-grid">${addrs.map(a => `<div class="addr ${a.main ? 'main' : ''}"><b>${esc(a.label || '')}</b> ${a.main ? '<span class="badge ok">Principal</span>' : ''}<br><span class="small mut">${esc(a.street)}<br>${esc(a.district || '')} — ${esc(a.city)}/${esc(a.state)}<br>CEP ${esc(a.zip)}</span>
+    <div style="margin-top:8px;display:flex;gap:6px">${!a.main ? `<button class="btn sm ghost" onclick="addrMain('${a.id}')">Tornar principal</button>` : ''}<button class="btn sm ghost" onclick="addrDel('${a.id}')">🗑️</button></div></div>`).join('') || '<p class="mut">Nenhum endereço.</p>'}</div></div>
+  <div class="panel"><h3>＋ Novo endereço</h3><form onsubmit="addrAdd(event)"><div class="row2"><div><label class="lbl">Rótulo</label><input class="inp" name="label" required placeholder="Casa, Loja..."></div><div><label class="lbl">CEP</label><input class="inp" name="zip" required></div></div>
+    <div style="margin-top:8px"><label class="lbl">Rua + número</label><input class="inp" name="street" required></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Bairro</label><input class="inp" name="district"></div><div><label class="lbl">Cidade</label><input class="inp" name="city" required></div></div>
+    <div style="margin-top:8px;max-width:120px"><label class="lbl">UF</label><input class="inp" name="state" maxlength="2" required></div>
+    <button class="btn" style="margin-top:10px">Salvar</button></form></div>`;
+}
+async function addrAdd(e) {
+  e.preventDefault(); const f = e.target;
+  await api('/api/addresses', { method: 'POST', body: JSON.stringify({ label: f.label.value, zip: f.zip.value, street: f.street.value, district: f.district.value, city: f.city.value, state: f.state.value }) });
+  const me = await api('/api/auth/me'); Auth.set({ token: Auth.token, user: me });
+  toast('Endereço salvo! 📍', 'ok'); viewAddresses();
+}
+async function addrMain(id) { await api(`/api/addresses/${id}`, { method: 'PUT', body: JSON.stringify({ main: true }) }); const me = await api('/api/auth/me'); Auth.set({ token: Auth.token, user: me }); viewAddresses(); }
+async function addrDel(id) { if (!confirm('Excluir endereço?')) return; await api(`/api/addresses/${id}`, { method: 'DELETE' }); const me = await api('/api/auth/me'); Auth.set({ token: Auth.token, user: me }); viewAddresses(); }
+
+/* ---------- Favoritos / cupons / perfil ---------- */
+async function viewFavs() {
+  const favs = Auth.user.favorites || [];
+  let list = [];
+  if (favs.length) { const all = await api('/api/products'); list = all.filter(p => favs.includes(p.id)); }
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>❤️ Favoritos</h1><p>${list.length} produto(s) salvos</p></div></div>
+  ${list.length ? `<div class="prod-grid">${list.map(productCard).join('')}</div>` : `<div class="panel"><div class="empty"><div class="e">🤍</div><p>Toque no 🤍 dos produtos para salvar aqui.<br><br><a class="btn" href="/produtos.html">Explorar produtos</a></p></div></div>`}`;
+}
+function viewCoupons() {
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>🎟️ Meus cupons</h1><p>Use no checkout e economize</p></div></div>
+  <div class="grid2">
+    ${[['BEMVINDO10', '10% OFF acima de R$ 100', '🔥'], ['PRINT15', '15% OFF acima de R$ 300', '💎'], ['FRETEGRATIS', 'Frete grátis acima de R$ 299', '🚚']].map(([c, d, i]) => `
+    <div class="panel" style="border:2px dashed var(--primary);text-align:center"><div style="font-size:34px">${i}</div><h2 class="mono">${c}</h2><p class="mut">${d}</p><button class="btn sm navy" onclick="navigator.clipboard?.writeText('${c}');toast('Cupom ${c} copiado! 🎟️','ok')">Copiar código</button></div>`).join('')}
+  </div>`;
+}
+function viewProfile() {
+  const u = Auth.user;
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>👤 Meus dados</h1><p>Mantenha seu cadastro atualizado</p></div></div>
+  <div class="grid2"><div class="panel"><h3>Cadastro</h3><form onsubmit="saveProfile(event)">
+    <label class="lbl">Nome</label><input class="inp" name="name" value="${esc(u.name)}">
+    <div style="margin-top:8px"><label class="lbl">E-mail</label><input class="inp" value="${esc(u.email)}" disabled></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Telefone</label><input class="inp" name="phone" value="${esc(u.phone || '')}"></div><div><label class="lbl">CPF/CNPJ</label><input class="inp" name="cpf" value="${esc(u.cpf || '')}"></div></div>
+    <button class="btn" style="margin-top:10px">Salvar alterações</button></form></div>
+  <div class="panel"><h3>🔐 Trocar senha</h3><form onsubmit="savePass(event)">
+    <label class="lbl">Senha atual</label><input class="inp" name="current" type="password" required>
+    <div style="margin-top:8px"><label class="lbl">Nova senha</label><input class="inp" name="next" type="password" required minlength="6"></div>
+    <button class="btn navy" style="margin-top:10px">Trocar senha</button></form></div></div>`;
+}
+async function saveProfile(e) { e.preventDefault(); const f = e.target; const u = await api('/api/auth/me', { method: 'PUT', body: JSON.stringify({ name: f.name.value, phone: f.phone.value, cpf: f.cpf.value }) }); Auth.set({ token: Auth.token, user: u }); toast('Dados atualizados! ✅', 'ok'); renderSide('dados'); }
+async function savePass(e) { e.preventDefault(); const f = e.target; await api('/api/auth/password', { method: 'POST', body: JSON.stringify({ current: f.current.value, next: f.next.value }) }); toast('Senha trocada! 🔐', 'ok'); f.reset(); }

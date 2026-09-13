@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=3"></head>
+<body data-page="checkout">
+<div id="site-header"></div>
+<div class="wrap">
+  <div class="crumb">Início › Carrinho › <b>Checkout</b></div>
+  <div class="stepsck"><div class="on">1 • Entrega</div><div class="on">2 • Pagamento</div><div>3 • Confirmação</div></div>
+  <div class="cartlay">
+    <div>
+      <div class="card"><h3>📍 Endereço de entrega</h3><div id="ck-addr"></div>
+        <details style="margin-top:10px"><summary class="link-more" style="cursor:pointer">＋ Novo endereço</summary>
+          <form onsubmit="ckAddAddress(event)" style="margin-top:10px">
+            <div class="row2"><div><label class="lbl">Rótulo</label><input class="inp" name="label" placeholder="Casa, Loja..." required></div>
+            <div><label class="lbl">CEP</label><input class="inp" name="zip" placeholder="00000-000" required></div></div>
+            <div style="margin-top:8px"><label class="lbl">Rua + número + complemento</label><input class="inp" name="street" required></div>
+            <div class="row2" style="margin-top:8px"><div><label class="lbl">Bairro</label><input class="inp" name="district"></div>
+            <div><label class="lbl">Cidade</label><input class="inp" name="city" required></div></div>
+            <div style="margin-top:8px"><label class="lbl">UF</label><input class="inp" name="state" maxlength="2" required></div>
+            <button class="btn sm" style="margin-top:10px">Salvar endereço</button></form></details></div>
+      <div class="card"><h3>🚚 Frete</h3>
+        <div class="pills"><button class="pill on" onclick="ckSetShip('PAC');$$('.card .pills .pill').forEach((b,i)=>b.classList.toggle('on',i===0))">PAC (5-8 dias)</button>
+        <button class="pill" onclick="ckSetShip('SEDEX');$$('.card .pills .pill').forEach((b,i)=>b.classList.toggle('on',i===1))">SEDEX (2-4 dias)</button></div></div>
+      <div class="card"><h3>💳 Pagamento</h3>
+        <div class="paym"><button data-pay="pix" class="on" onclick="ckSetPay('pix')">⚡ Pix<small>5% OFF à vista</small></button>
+        <button data-pay="card" onclick="ckSetPay('card')">💳 Cartão<small>em até 6x sem juros</small></button>
+        <button data-pay="boleto" onclick="ckSetPay('boleto')">🧾 Boleto<small>1-2 dias p/ compensar</small></button></div></div>
+      <div class="card"><h3>🎨 Arte do pedido <span class="small mut">(opcional agora)</span></h3>
+        <label class="filebox" style="display:block">📤 <b>Clique para enviar sua arte</b><br><span class="small mut">PDF, JPG, PNG, AI, PSD, CDR — até 60MB</span>
+        <input type="file" hidden onchange="ckArt(this)"></label><div id="ck-art-ok" class="small" style="margin-top:8px"></div></div>
+    </div>
+    <div><div class="card"><h3>🧾 Seu pedido</h3><div id="ck-items" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px"></div>
+      <div class="coupon"><input class="inp" id="ck-coupon" placeholder="Cupom (ex: BEMVINDO10)"><button class="btn navy" onclick="ckApplyCoupon()">OK</button></div>
+      <div id="ck-totals" style="margin-top:14px"></div>
+      <button class="btn big block" id="ck-btn" style="margin-top:14px" onclick="ckFinish()">Confirmar pedido ✅</button>
+      <p class="small mut" style="text-align:center">🔒 Pagamento 100% seguro (demonstração)</p></div></div>
+  </div>
+</div>
+<div id="site-footer"></div>
+<script src="/js/app.js?v=3"></script><script src="/js/shop.js?v=3"></script>
+</body></html>

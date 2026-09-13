@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PrimePrint — Gráfica Online | Impressão barata e rápida</title>
+<link rel="stylesheet" href="/css/style.css?v=3"></head>
+<body data-page="home">
+<div id="site-header"></div>
+<div class="wrap">
+  <div class="hero" id="hero"></div>
+  <div class="benefits">
+    <div class="benefit"><span class="ic">🚚</span><div><b>Envio p/ todo Brasil</b><span>Frete grátis acima de R$ 299</span></div></div>
+    <div class="benefit"><span class="ic">🔒</span><div><b>Compra 100% segura</b><span>Pix, cartão e boleto</span></div></div>
+    <div class="benefit"><span class="ic">🛡️</span><div><b>Qualidade garantida</b><span>Reimpressão em caso de defeito</span></div></div>
+    <div class="benefit"><span class="ic">💬</span><div><b>Suporte humano</b><span>Seg a Sex, 9h às 18h</span></div></div>
+  </div>
+  <section class="block"><div class="sec-hd"><div><h2>🗂️ Compre por categoria</h2><p>Do cartão de visita ao banner gigante</p></div><a class="link-more" href="/produtos.html">Ver tudo →</a></div>
+    <div class="cat-grid" id="home-cats"></div></section>
+  <section class="block"><div class="sec-hd"><div><h2>🔥 Mais vendidos</h2><p>Os queridinhos de milhares de clientes</p></div><a class="link-more" href="/produtos.html">Ver catálogo →</a></div>
+    <div class="prod-grid" id="home-prods"></div></section>
+  <section class="block"><div class="calc">
+    <div><h2>🧮 Calculadora rápida</h2><p>Selecione o produto e a quantidade para ver o preço na hora. Sem cadastro, sem enrolação.</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><span class="badge sale">Pix com 5% OFF</span><span class="badge ok">Frete grátis +R$299</span><span class="badge">Expressa disponível</span></div></div>
+    <div class="box"><label class="lbl">Produto</label><select class="inp" id="calc-prod"></select>
+      <div class="row2" style="margin-top:10px"><div><label class="lbl">Quantidade</label><select class="inp" id="calc-qty"></select></div>
+      <div><label class="lbl">Papel</label><select class="inp" id="calc-paper"></select></div></div>
+      <div class="res" id="calc-res"></div></div>
+  </div></section>
+  <section class="block"><div class="sec-hd"><div><h2>⚙️ Como funciona</h2><p>Do clique à entrega em 4 passos</p></div></div>
+    <div class="steps">
+      <div class="step"><div class="n">1</div><b>Configure</b><p class="small mut">Escolha formato, papel e quantidade com preço na hora</p></div>
+      <div class="step"><div class="n">2</div><b>Pague</b><p class="small mut">Pix com desconto, cartão ou boleto</p></div>
+      <div class="step"><div class="n">3</div><b>Envie a arte</b><p class="small mut">No checkout ou depois, na sua conta</p></div>
+      <div class="step"><div class="n">4</div><b>Receba</b><p class="small mut">Acompanhe a produção e receba em casa</p></div>
+    </div></section>
+  <section class="block"><div class="sec-hd"><div><h2>⭐ Quem comprou, aprovou</h2><p>+120 mil pedidos entregues</p></div></div>
+    <div class="deps">
+      <div class="dep"><div class="stars">★★★★★</div><p>"Cartões com qualidade absurda e chegaram antes do prazo. Virei cliente fiel!"</p><b>Mariana L.</b> <span>• Loja de roupas, Recife/PE</span></div>
+      <div class="dep"><div class="stars">★★★★★</div><p>"Fiz 10 mil panfletos pra inauguração. Preço imbatível e a arte ficou linda."</p><b>Carlos E.</b> <span>• Hamburgueria, Paulista/PE</span></div>
+      <div class="dep"><div class="stars">★★★★★</div><p>"O suporte me ajudou com a arte no WhatsApp. Atendimento nota 10."</p><b>Fernanda C.</b> <span>• Clínica estética, Olinda/PE</span></div>
+    </div></section>
+  <section class="block"><div class="sec-hd"><div><h2>❓ Dúvidas frequentes</h2></div><a class="link-more" href="/pagina.html?p=duvidas">Ver todas →</a></div>
+    <div class="faq">
+      <details open><summary>Qual o prazo de entrega?</summary><div class="a">Produção em até 5 dias úteis (normal) ou 2 dias (expressa), mais o prazo do frete.</div></details>
+      <details><summary>Posso enviar a arte depois de pagar?</summary><div class="a">Sim! Envie no checkout ou quando quiser, em "Meus pedidos".</div></details>
+      <details><summary>Vocês conferem a arte antes de imprimir?</summary><div class="a">Sim, análise gratuita em todos os pedidos. Achou erro, avisamos antes. 🛡️</div></details>
+    </div></section>
+  <section class="block"><div class="news"><div><h3>📧 Cadastre-se e ganhe 10% OFF</h3><p>Na primeira compra + ofertas exclusivas. Sem spam.</p></div>
+    <form onsubmit="event.preventDefault();toast('Cadastro feito! Use BEMVINDO10 🎉','ok');this.reset()"><input placeholder="Seu melhor e-mail" type="email" required><button class="btn navy">Quero!</button></form></div></section>
+</div>
+<div id="site-footer"></div>
+<script src="/js/app.js?v=3"></script><script src="/js/shop.js?v=3"></script>
+</body></html>
