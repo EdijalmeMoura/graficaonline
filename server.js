@@ -431,7 +431,7 @@ function seed() {
   products.forEach(p => p.img = IMGS[p.id] || null);
 
   const config = {
-    storeName: 'PrimePrint', phone: '(81) 9963-6568', whatsapp: '558199636568',
+    storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
     freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '',
   };
