@@ -20,6 +20,7 @@ function renderSide(active, badges = {}) {
       <a href="#/producao" class="${active === 'producao' ? 'on' : ''}">🏭 Produção</a>
       <a href="#/produtos" class="${active === 'produtos' ? 'on' : ''}">🖨️ Produtos</a>
       <a href="#/categorias" class="${active === 'categorias' ? 'on' : ''}">🗂️ Categorias</a>
+      <a href="#/avaliacoes" class="${active === 'avaliacoes' ? 'on' : ''}">⭐ Avaliações</a>
       <a href="#/clientes" class="${active === 'clientes' ? 'on' : ''}">👥 Clientes</a>
       <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
       <a href="#/pagamentos" class="${active === 'pagamentos' ? 'on' : ''}">💳 Pagamentos</a>
@@ -44,6 +45,7 @@ async function route() {
     if (path === 'producao') return viewKanban();
     if (path === 'produtos') return viewProducts();
     if (path === 'categorias') return viewCategories();
+    if (path === 'avaliacoes') return viewReviews();
     if (path === 'clientes') return viewCustomers();
     if (path === 'cupons') return viewCoupons();
     if (path === 'pagamentos') return viewPayments();
@@ -200,7 +202,7 @@ function editProduct(id) {
     <div><label class="lbl">Selo (opcional)</label><input class="inp" name="badge" value="${esc(p.badge || '')}" placeholder="Ex: Oferta, Novo"></div></div><div class="row2" style="margin-top:8px"><div><label class="lbl">🎨 Cor fundo 1</label><input type="color" class="inp" name="grad0" value="${esc(p.grad?.[0] || '#0B1E3B')}" style="height:44px;padding:4px;cursor:pointer"></div><div><label class="lbl">🎨 Cor fundo 2</label><input type="color" class="inp" name="grad1" value="${esc(p.grad?.[1] || '#FF4D00')}" style="height:44px;padding:4px;cursor:pointer"></div></div><div style="margin-top:10px"><label style="font-weight:700;font-size:14px"><input type="checkbox" name="active" ${p.active !== false ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Produto ativo (visível na loja)</label></div><details style="margin-top:10px;background:var(--bg);border-radius:10px;padding:10px 12px"><summary style="cursor:pointer;font-weight:700">⚙️ Variações avançadas (tamanhos, papéis, cores, acabamentos)</summary><p class="small mut">Formato JSON • "mod" multiplica o preço (0.1 = +10%) • "add" soma R$ • Deixe como está se não souber.</p><label class="lbl">Tamanhos (formats)</label><textarea class="inp mono" name="formats" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.formats || [], null, 1))}</textarea><label class="lbl" style="margin-top:6px">Papéis (papers)</label><textarea class="inp mono" name="papers" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.papers || [], null, 1))}</textarea><label class="lbl" style="margin-top:6px">Cores (colors)</label><textarea class="inp mono" name="colors" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.colors || [], null, 1))}</textarea><label class="lbl" style="margin-top:6px">Acabamentos (finishes)</label><textarea class="inp mono" name="finishes" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.finishes || [], null, 1))}</textarea></details>
     <div style="margin-top:8px"><label class="lbl">Chamada curta</label><input class="inp" name="tagline" value="${esc(p.tagline || '')}"></div>
     <div style="margin-top:8px"><label class="lbl">Descrição</label><textarea class="inp" name="desc" rows="2">${esc(p.desc || '')}</textarea></div>
-    <div style="margin-top:8px"><label class="lbl">Tabela de quantidades (qty:preço, separados por vírgula)</label><input class="inp mono" name="quantities" value="${p.quantities.map(q => q.qty + ':' + q.price).join(', ')}"></div><div style="margin-top:8px"><label class="lbl">📷 Foto do produto</label><div id="ep-imgprev">${p.img ? `<img src="${p.img}" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-bottom:8px">` : ''}</div><div class="row2"><div><label class="filebox" style="display:block;padding:12px">📤 <b>Enviar foto</b><input type="file" hidden accept="image/*" onchange="epUpload(this)"></label></div><div><input class="inp" name="img" value="${esc(p.img || '')}" placeholder="ou cole a URL da imagem"></div></div></div>
+    <div style="margin-top:8px"><label class="lbl">Tabela de quantidades (qty:preço, separados por vírgula)</label><input class="inp mono" name="quantities" value="${p.quantities.map(q => q.qty + ':' + q.price).join(', ')}"></div><div style="margin-top:8px;max-width:280px"><label class="lbl">💰 Custo (% do preço) — p/ lucro</label><input class="inp" name="costPct" type="number" min="0" max="95" value="${p.costPct ?? 45}"></div><div style="margin-top:8px"><label class="lbl">📷 Foto do produto</label><div id="ep-imgprev">${p.img ? `<img src="${p.img}" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-bottom:8px">` : ''}</div><div class="row2"><div><label class="filebox" style="display:block;padding:12px">📤 <b>Enviar foto</b><input type="file" hidden accept="image/*" onchange="epUpload(this)"></label></div><div><input class="inp" name="img" value="${esc(p.img || '')}" placeholder="ou cole a URL da imagem"></div></div></div>
     <button class="btn block" style="margin-top:12px">Salvar produto ✅</button></form></div>`);
 }
 async function saveProduct(e, id) {
@@ -212,6 +214,7 @@ async function saveProduct(e, id) {
   if (imgVal) body.img = imgVal;
   body.grad = [f.grad0.value, f.grad1.value];
   body.active = f.active.checked;
+  body.costPct = Math.min(95, Math.max(0, Number(f.costPct.value) || 0));
   const adv = {};
   for (const k of ['formats', 'papers', 'colors', 'finishes']) {
     const raw = (f[k].value || '').trim();
@@ -349,20 +352,61 @@ function delBanner(i) { if (confirm('Excluir este banner?')) { BANNERS.splice(i,
 async function saveBanners() { await api('/api/banners', { method: 'PUT', body: JSON.stringify({ banners: BANNERS }) }); toast('Banners salvos! 🖼️', 'ok'); }
 
 /* ---------- RELATÓRIOS ---------- */
-function viewReports() {
-  const valid = ORDERS.filter(o => o.status !== 'cancelado');
+/* ---------- Avaliações ---------- */
+async function viewReviews() {
+  PRODUCTS = await api('/api/products');
+  const all = [];
+  PRODUCTS.forEach(p => (p.reviews || []).forEach(r => all.push({ p, r })));
+  all.sort((x, y) => new Date(y.r.at) - new Date(x.r.at));
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>⭐ Avaliações</h1><p>${all.length} avaliação(ões) • lixeira = moderar</p></div></div>
+    <div class="panel">${all.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Produto</th><th>Cliente</th><th>Estrelas</th><th>Comentário</th><th></th></tr>
+    ${all.map(({ p, r }) => `<tr><td><b>${esc(p.name)}</b><br><span class="small mut">${fmtDate(r.at)}</span></td><td>${esc(r.userName)}${r.verified ? '<br><span class="badge ok">verificada</span>' : ''}</td><td>${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)}</td><td>${esc(r.text)}</td><td><button class="btn sm danger" onclick="delReview('${p.id}','${r.id}')">🗑️</button></td></tr>`).join('')}</table></div>`
+    : '<div class="empty"><div class="e">⭐</div><p>Nenhuma avaliação ainda.</p></div>'}</div>`;
+}
+async function delReview(pid, rid) {
+  if (!confirm('Excluir esta avaliação?')) return;
+  await api(`/api/products/${pid}/reviews/${rid}`, { method: 'DELETE' });
+  toast('Avaliação excluída', 'ok'); viewReviews();
+}
+let REP_DAYS = 30;
+async function viewReports() {
+  if (!PRODUCTS.length) { try { PRODUCTS = await api('/api/products'); } catch { } }
+  const cutoff = REP_DAYS ? Date.now() - REP_DAYS * 864e5 : 0;
+  const valid = ORDERS.filter(o => o.status !== 'cancelado' && (!cutoff || new Date(o.createdAt).getTime() >= cutoff));
+  const pmap = {}; PRODUCTS.forEach(p => pmap[p.id] = p.costPct ?? 45);
+  let repRev = 0, repProfit = 0;
+  const tmap = {};
+  valid.forEach(o => {
+    const dr = o.subtotal ? (o.discount || 0) / o.subtotal : 0;
+    (o.items || []).forEach(i => {
+      const net = i.total * (1 - dr); repRev += net;
+      const pf = net * (1 - (pmap[i.productId] ?? 45) / 100); repProfit += pf;
+      const t = tmap[i.productId] = tmap[i.productId] || { name: i.name, qty: 0, rev: 0, profit: 0 };
+      t.qty += i.qty; t.rev += net; t.profit += pf;
+    });
+  });
+  const topProd = Object.values(tmap).sort((x, y) => y.profit - x.profit).slice(0, 10);
+  const repMargin = repRev ? Math.round(repProfit / repRev * 100) : 0;
   const byPay = {};
   valid.forEach(o => byPay[o.payment.method] = (byPay[o.payment.method] || 0) + o.total);
-  $('#view').innerHTML = `<div class="main-hd"><div><h1>📈 Relatórios</h1><p>Desempenho da loja</p></div>
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>📈 Relatórios</h1><p>Desempenho • período: ${[7, 30, 90].map(d => `<button class="btn sm ${REP_DAYS === d ? 'navy' : 'ghost'}" onclick="REP_DAYS=${d};viewReports()">${d}d</button>`).join(' ')} <button class="btn sm ${!REP_DAYS ? 'navy' : 'ghost'}" onclick="REP_DAYS=0;viewReports()">tudo</button></p></div>
     <button class="btn navy" style="margin-left:auto" onclick="exportCSV()">⬇️ Exportar CSV</button></div>
-  <div class="grid2">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:14px">
+    <div class="panel" style="margin:0;text-align:center"><div style="font-size:26px">💰</div><div class="small mut">Faturamento</div><h2 style="margin:4px 0">${BRL(Math.round(repRev * 100) / 100)}</h2></div>
+    <div class="panel" style="margin:0;text-align:center"><div style="font-size:26px">📊</div><div class="small mut">Lucro estimado</div><h2 style="margin:4px 0;color:var(--ok)">${BRL(Math.round(repProfit * 100) / 100)}</h2><small class="mut">margem ${repMargin}%</small></div>
+    <div class="panel" style="margin:0;text-align:center"><div style="font-size:26px">🧾</div><div class="small mut">Ticket médio</div><h2 style="margin:4px 0">${valid.length ? BRL(repRev / valid.length) : '—'}</h2><small class="mut">${valid.length} pedidos</small></div>
+    <div class="panel" style="margin:0;text-align:center"><div style="font-size:26px">🎁</div><div class="small mut">Pontos resgatados</div><h2 style="margin:4px 0">${valid.reduce((s, o) => s + (o.pointsUsed || 0), 0).toLocaleString('pt-BR')}</h2></div>
+  </div>
+<div class="grid2">
     <div class="panel"><h3>💳 Faturamento por pagamento</h3>
       ${Object.entries(byPay).map(([k, v]) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span>${k === 'pix' ? '⚡ Pix' : k === 'card' ? '💳 Cartão' : '🧾 Boleto'}</span><b>${BRL(v)}</b></div>`).join('') || '<p class="mut">—</p>'}</div>
     <div class="panel"><h3>📦 Pedidos por status</h3>
       ${Object.entries(STATS.byStatus).map(([k, v]) => `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--line)"><span>${stTag(k)}</span><b>${v}</b></div>`).join('')}</div>
   </div>
   <div class="panel"><h3>🧾 Todos os pedidos</h3><div style="overflow:auto;max-height:400px"><table class="tbl"><tr><th>Código</th><th>Data</th><th>Cliente</th><th>Total</th><th>Status</th></tr>
-  ${ORDERS.map(o => `<tr><td><b>${o.code}</b></td><td>${fmtDate(o.createdAt)}</td><td>${esc(o.customer?.name || '')}</td><td>${BRL(o.total)}</td><td>${stTag(o.status)}</td></tr>`).join('')}</table></div></div>`;
+  ${ORDERS.map(o => `<tr><td><b>${o.code}</b></td><td>${fmtDate(o.createdAt)}</td><td>${esc(o.customer?.name || '')}</td><td>${BRL(o.total)}</td><td>${stTag(o.status)}</td></tr>`).join('')}</table></div></div>
+  <div class="panel"><h3>🏆 Lucro por produto (top 10)</h3><div style="overflow:auto"><table class="tbl"><tr><th>Produto</th><th>Qtd</th><th>Faturamento</th><th>Lucro est.</th></tr>${topProd.map(t => `<tr><td><b>${esc(t.name)}</b></td><td>${t.qty.toLocaleString('pt-BR')} un</td><td>${BRL(Math.round(t.rev * 100) / 100)}</td><td><b style="color:var(--ok)">${BRL(Math.round(t.profit * 100) / 100)}</b></td></tr>`).join('') || '<tr><td colspan="4" class="mut">—</td></tr>'}</table></div></div>`;
 }
 function exportCSV() {
   const rows = [['codigo', 'data', 'cliente', 'email', 'total', 'status', 'pagamento']];

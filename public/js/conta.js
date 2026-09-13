@@ -69,7 +69,7 @@ function viewHome() {
   const saved = Math.round(ORDERS.reduce((s, o) => s + (o.discount || 0), 0) * 100) / 100;
   const spent = ORDERS.filter(o => o.status !== 'cancelado').reduce((s, o) => s + o.total, 0);
   $('#view').innerHTML = `
-    <div class="main-hd"><div><h1>Olá, ${esc(u.name.split(' ')[0])}! 👋</h1><p>Aqui você acompanha pedidos, artes e dados.</p></div>
+    <div class="main-hd"><div><h1>Olá, ${esc(u.name.split(' ')[0])}! 👋</h1><p>Aqui você acompanha pedidos, artes e dados. 🎁 Saldo: <b>${u.points || 0} pontos</b> <span class="small mut">(10 pts = R$ 1 no checkout)</span></p></div>
       <a class="btn" style="margin-left:auto" href="/produtos.html">🛍️ Fazer novo pedido</a></div>
     <div class="kpis">
       <div class="kpi"><div class="ki">📦</div><span>Pedidos ativos</span><b>${active.length}</b><small>em andamento</small></div>
@@ -114,9 +114,10 @@ function viewOrderDetail(id) {
     <div class="grid2">
       <div class="panel"><h3>📍 Acompanhamento</h3>${timeline(o)}
         ${o.tracking ? `<p>🚚 <b>Rastreio:</b> <span class="mono">${esc(o.tracking)}</span> <button class="btn sm ghost" onclick="toast('Pacote a caminho! 📦 Previsão: 3 dias úteis','ok')">Rastrear</button></p>` : ''}
-        <h3 style="margin-top:16px">🧾 Itens</h3>${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span><span>${i.qty.toLocaleString('pt-BR')} un × ${BRL(i.unit)}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
+        <h3 style="margin-top:16px">🧾 Itens</h3>${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span><span>${i.qty.toLocaleString('pt-BR')} un × ${BRL(i.unit)}</span>${o.status === 'entregue' ? ` <a class="link-more small" href="/produto.html?id=${i.productId}">⭐ Avaliar</a>` : ''}</div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
         <div class="totals" style="margin-top:10px"><div class="tt"><span>Subtotal</span><span>${BRL(o.subtotal)}</span></div>
         ${o.discount ? `<div class="tt"><span>Desconto ${o.coupon ? '(' + o.coupon + ')' : ''}</span><b style="color:var(--ok)">−${BRL(o.discount)}</b></div>` : ''}
+        ${o.pointsDiscount ? `<div class="tt"><span>Pontos usados (${o.pointsUsed})</span><b style="color:var(--ok)">−${BRL(o.pointsDiscount)}</b></div>` : ''}
         <div class="tt"><span>Frete (${o.shippingType})</span><span>${o.shipping ? BRL(o.shipping) : 'GRÁTIS 🎉'}</span></div>
         <div class="tt gt"><span>Total</span><span>${BRL(o.total)}</span></div></div></div>
       <div>

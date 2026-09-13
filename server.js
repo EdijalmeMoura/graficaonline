@@ -384,8 +384,8 @@ function seed() {
   ];
 
   const users = [
-    { id: 'u-admin', name: 'Administrador', email: 'admin@primeprint.com.br', pass: bcrypt.hashSync('admin123', 8), phone: '(81) 3000-0000', cpf: '000.000.000-00', role: 'admin', addresses: [], favorites: [], active: true, createdAt: new Date().toISOString() },
-    { id: 'u-demo', name: 'João Silva (demo)', email: 'cliente@demo.com', pass: bcrypt.hashSync('demo123', 8), phone: '(81) 99999-0000', cpf: '123.456.789-00', role: 'customer', addresses: [{ id: 'a1', label: 'Casa', street: 'Rua das Flores, 123', district: 'Centro', city: 'Paulista', state: 'PE', zip: '53400-000', main: true }], favorites: ['cartao-visita', 'panfleto-10x15'], active: true, createdAt: new Date().toISOString() },
+    { id: 'u-admin', name: 'Administrador', email: 'admin@primeprint.com.br', pass: bcrypt.hashSync('admin123', 8), phone: '(81) 3000-0000', cpf: '000.000.000-00', role: 'admin', addresses: [], favorites: [], points: 0, active: true, createdAt: new Date().toISOString() },
+    { id: 'u-demo', name: 'João Silva (demo)', email: 'cliente@demo.com', pass: bcrypt.hashSync('demo123', 8), phone: '(81) 99999-0000', cpf: '123.456.789-00', role: 'customer', addresses: [{ id: 'a1', label: 'Casa', street: 'Rua das Flores, 123', district: 'Centro', city: 'Paulista', state: 'PE', zip: '53400-000', main: true }], favorites: ['cartao-visita', 'panfleto-10x15'], points: 150, active: true, createdAt: new Date().toISOString() },
   ];
 
   const now = Date.now(), D = 864e5;
@@ -436,6 +436,14 @@ function seed() {
     freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '',
   };
 
+  const cvSeed = products.find(p => p.id === 'cartao-visita');
+  if (cvSeed) {
+    cvSeed.reviews = [
+      { id: 'r-seed1', userId: 'u-demo', userName: 'João Silva', stars: 5, text: 'Qualidade excelente, cores vivas e chegou antes do prazo!', verified: true, at: new Date(now - 8 * D).toISOString() },
+      { id: 'r-seed2', userId: 'u-demo', userName: 'Maria Souza', stars: 5, text: 'Papel ótimo e acabamento perfeito. Virei cliente!', verified: false, at: new Date(now - 3 * D).toISOString() },
+    ];
+    cvSeed.rating = 5;
+  }
   return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, messages: [], config };
 }
 
@@ -456,7 +464,7 @@ function admin(req, res, next) {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Acesso restrito' });
   next();
 }
-const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, cpf: u.cpf, role: u.role, addresses: u.addresses || [], favorites: u.favorites || [], createdAt: u.createdAt });
+const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, cpf: u.cpf, role: u.role, addresses: u.addresses || [], favorites: u.favorites || [], points: u.points || 0, createdAt: u.createdAt });
 
 /* ---------------- Precificação ---------------- */
 function calcPrice(product, sel = {}) {
@@ -547,7 +555,7 @@ app.post('/api/auth/register', (req, res) => {
   if (pass.length < 6) return res.status(400).json({ error: 'A senha deve ter ao menos 6 caracteres' });
   const db = loadDB();
   if (db.users.some(u => u.email.toLowerCase() === email.toLowerCase())) return res.status(400).json({ error: 'E-mail já cadastrado' });
-  const user = { id: uid('u-'), name, email, pass: bcrypt.hashSync(pass, 8), phone, cpf, role: 'customer', addresses: [], favorites: [], active: true, createdAt: new Date().toISOString() };
+  const user = { id: uid('u-'), name, email, pass: bcrypt.hashSync(pass, 8), phone, cpf, role: 'customer', addresses: [], favorites: [], points: 0, active: true, createdAt: new Date().toISOString() };
   db.users.push(user); saveDB();
   res.json({ token: sign(user), user: pubUser(user) });
 });
@@ -653,7 +661,7 @@ app.get('/api/admin/shipping', auth, admin, (req, res) => {
 });
 app.post('/api/orders', auth, async (req, res) => {
   const db = loadDB();
-  let { items = [], address, shippingType = 'PAC', shippingLabel = null, paymentMethod = 'pix', coupon = null, art = null } = req.body;
+  let { items = [], address, shippingType = 'PAC', shippingLabel = null, paymentMethod = 'pix', coupon = null, art = null, pointsUsed = 0 } = req.body;
   if (shippingType === 'Retirada' && (!address || !address.street)) address = { label: 'Retirada na loja', street: 'Retirada na loja', district: '', city: '', state: '', zip: '' };
   if (!items.length) return res.status(400).json({ error: 'Carrinho vazio' });
   if (!address || !address.street) return res.status(400).json({ error: 'Informe o endereço de entrega' });
@@ -693,11 +701,18 @@ app.post('/api/orders', auth, async (req, res) => {
   if (freeship || (subtotal - discount) >= db.config.freeShipFrom) shipping = 0;
   if (paymentMethod === 'pix') discount += Math.round((subtotal - discount) * db.config.pixDiscount) / 100;
   discount = Math.round(discount * 100) / 100;
-  const total = Math.round((subtotal - discount + shipping) * 100) / 100;
+  let pointsUsedFinal = 0, pointsDiscount = 0;
+  const buyer = db.users.find(x => x.id === req.user.id);
+  if (pointsUsed > 0 && buyer) {
+    pointsUsedFinal = Math.min(Math.floor(pointsUsed), buyer.points || 0, Math.floor(Math.max(0, subtotal - discount) * 10));
+    pointsDiscount = Math.round(pointsUsedFinal / 10 * 100) / 100;
+    buyer.points -= pointsUsedFinal;
+  }
+  const total = Math.round((subtotal - discount - pointsDiscount + shipping) * 100) / 100;
   const n = db.seq.order++;
   const order = {
     id: uid('o-'), code: `PP-2026-${n}`, userId: req.user.id, items: normItems,
-    subtotal, discount, coupon: couponCode, shipping, total,
+    subtotal, discount, coupon: couponCode, shipping, total, pointsUsed: pointsUsedFinal, pointsDiscount,
     payment: { method: paymentMethod, status: paymentMethod === 'boleto' ? 'pending' : 'paid' },
     address, shippingType: shipLabel, status: art && art.url ? 'em_analise' : 'aguardando_arte', tracking: '',
     art: art && art.url ? { file: art.url, originalName: art.name || '', status: 'in_review', feedback: '' } : { file: null, originalName: '', status: 'pending', feedback: '' },
@@ -757,6 +772,12 @@ app.put('/api/orders/:id/status', auth, admin, (req, res) => {
   const { status, note = '', tracking = '' } = req.body;
   o.status = status;
   if (tracking !== undefined) o.tracking = tracking;
+  if (status === 'entregue' && !o.pointsAwarded) {
+    o.pointsAwarded = true;
+    const u = loadDB().users.find(x => x.id === o.userId);
+    const pts = Math.max(0, Math.floor((o.subtotal || 0) - (o.discount || 0)));
+    if (u && pts > 0) { u.points = (u.points || 0) + pts; o.timeline.push({ status, at: new Date().toISOString(), note: '+' + pts + ' pontos fidelidade' }); }
+  }
   o.timeline.push({ status, at: new Date().toISOString(), note });
   saveDB(); res.json(o);
 });
@@ -790,6 +811,34 @@ app.put('/api/orders/:id/pay', auth, admin, (req, res) => {
   o.payment.status = req.body.status === 'paid' ? 'paid' : 'pending';
   o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Pagamento: ' + o.payment.status });
   saveDB(); res.json(o);
+});
+/* Avaliações de produtos */
+app.get('/api/products/:id/reviews', (req, res) => {
+  const p = loadDB().products.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ error: 'Produto não encontrado' });
+  res.json(p.reviews || []);
+});
+app.post('/api/products/:id/reviews', auth, (req, res) => {
+  const db = loadDB();
+  const p = db.products.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ error: 'Produto não encontrado' });
+  const stars = Math.min(5, Math.max(1, Number(req.body.stars) || 0));
+  const text = String(req.body.text || '').slice(0, 500).trim();
+  if (!stars || !text) return res.status(400).json({ error: 'Dê de 1 a 5 estrelas e escreva um comentário' });
+  p.reviews = p.reviews || [];
+  const verified = db.orders.some(o => o.userId === req.user.id && o.status === 'entregue' && o.items.some(i => i.productId === p.id));
+  const ex = p.reviews.find(r => r.userId === req.user.id);
+  if (ex) { ex.stars = stars; ex.text = text; ex.at = new Date().toISOString(); ex.verified = verified; }
+  else p.reviews.unshift({ id: uid('r-'), userId: req.user.id, userName: req.user.name, stars, text, verified, at: new Date().toISOString() });
+  p.rating = Math.round(p.reviews.reduce((s, r) => s + r.stars, 0) / p.reviews.length * 10) / 10;
+  saveDB(); res.json(p.reviews);
+});
+app.delete('/api/products/:id/reviews/:rid', auth, admin, (req, res) => {
+  const p = loadDB().products.find(x => x.id === req.params.id);
+  if (!p) return res.status(404).json({ error: 'Produto não encontrado' });
+  p.reviews = (p.reviews || []).filter(r => r.id !== req.params.rid);
+  if (p.reviews.length) p.rating = Math.round(p.reviews.reduce((s, r) => s + r.stars, 0) / p.reviews.length * 10) / 10;
+  saveDB(); res.json({ ok: true });
 });
 /* Produtos / categorias / cupons / banners / config (admin) */
 app.post('/api/products', auth, admin, (req, res) => {

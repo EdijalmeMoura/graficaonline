@@ -134,6 +134,7 @@ async function pageProduct() {
   $('#pd-shiptype').onchange = pdNumbers;
   renderCfg();
   loadRelated();
+  loadReviews();
 }
 function renderCfg() {
   $('#pd-steps').innerHTML = cfgSteps().map(s => {
@@ -153,6 +154,27 @@ function renderCfg() {
     return `<div class="opt">${hd}<div class="pills">${pills}</div></div>`;
   }).join('');
   pdNumbers();
+}
+async function loadReviews() {
+  let list = [];
+  try { list = await api(`/api/products/${PD.id}/reviews`); } catch { }
+  document.querySelector('#pd-reviews-sec')?.remove();
+  const sec = document.createElement('section');
+  sec.className = 'block'; sec.id = 'pd-reviews-sec';
+  const avg = list.length ? list.reduce((s, r) => s + r.stars, 0) / list.length : 0;
+  sec.innerHTML = `<div class="sec-hd"><div><span class="kick">Opinião de quem comprou</span><h2>Avaliações${list.length ? ` (${avg.toFixed(1)} • ${list.length})` : ''}</h2></div></div>
+  <div class="card">${list.length ? list.map(r => `<div style="border-bottom:1px solid var(--line);padding:10px 0"><b>${esc(r.userName)}</b> ${'★'.repeat(r.stars)}${'☆'.repeat(5 - r.stars)} ${r.verified ? '<span class="badge ok">compra verificada</span>' : ''}<br><span>${esc(r.text)}</span><br><small class="mut">${fmtDate(r.at)}</small></div>`).join('') : '<p class="mut">Ainda não há avaliações. Seja o primeiro! 🙂</p>'}
+  ${Auth.user ? `<div style="margin-top:12px"><h3>Sua avaliação</h3><div id="rv-stars" style="font-size:28px;cursor:pointer">${[1, 2, 3, 4, 5].map(i => `<span data-s="${i}" onclick="rvPick(${i})">☆</span>`).join('')}</div><textarea class="inp" id="rv-text" rows="2" placeholder="O que achou do produto?" style="margin-top:8px"></textarea><br><button class="btn" style="margin-top:8px" onclick="rvSend()">Enviar avaliação</button></div>`
+  : '<p style="margin-top:12px"><a class="link-more" href="/login.html">Entre</a> para avaliar este produto.</p>'}</div>`;
+  document.querySelector('.pd').after(sec);
+}
+let RV_STARS = 5;
+function rvPick(n) { RV_STARS = n; document.querySelectorAll('#rv-stars span').forEach(sp => sp.textContent = Number(sp.dataset.s) <= n ? '★' : '☆'); }
+async function rvSend() {
+  const text = document.querySelector('#rv-text').value.trim();
+  if (!text) { toast('Escreva um comentário', 'err'); return; }
+  try { await api(`/api/products/${PD.id}/reviews`, { method: 'POST', body: JSON.stringify({ stars: RV_STARS, text }) }); toast('Avaliação enviada! ⭐', 'ok'); loadReviews(); }
+  catch (e) { toast(e.message, 'err'); }
 }
 async function loadRelated() {
   try {
@@ -220,7 +242,7 @@ function pageCart() {
 }
 
 /* ---------- CHECKOUT ---------- */
-let CK = { coupon: null, shipType: 'PAC', pay: 'pix', addressId: null, art: null };
+let CK = { coupon: null, shipType: 'PAC', pay: 'pix', addressId: null, art: null, pointsUsed: 0 };
 async function pageCheckout() {
   if (!Cart.items.length) { location.href = '/carrinho.html'; return; }
   if (!Auth.user) { toast('Entre ou crie sua conta para finalizar 🙂'); location.href = '/login.html?next=/checkout.html'; return; }
@@ -324,14 +346,24 @@ function ckTotals() {
   if (free || (sub - desc) >= (CONFIG.freeShipFrom || 299)) ship = 0;
   let pixOff = 0;
   if (CK.pay === 'pix') pixOff = Math.round((sub - desc) * (CONFIG.pixDiscount || 5)) / 100;
-  const total = Math.max(0, sub - desc - pixOff + ship);
-  CK._calc = { sub, desc: desc + pixOff, ship, total };
+  const ptsBalance = Auth.user?.points || 0;
+  const ptsMax = Math.min(ptsBalance, Math.floor(Math.max(0, sub - desc - pixOff) * 10));
+  if (CK.pointsUsed > ptsMax) CK.pointsUsed = ptsMax;
+  const ptsOff = Math.round(CK.pointsUsed / 10 * 100) / 100;
+  const total = Math.max(0, sub - desc - pixOff - ptsOff + ship);
+  CK._calc = { sub, desc: desc + pixOff + ptsOff, ship, total };
   $('#ck-totals').innerHTML = `<div class="totals">
     <div class="tt"><span>Subtotal</span><b>${BRL(sub)}</b></div>
     ${desc || pixOff ? `<div class="tt"><span>Descontos</span><b style="color:var(--ok)">−${BRL(desc + pixOff)}</b></div>` : ''}
+    ${ptsBalance > 0 ? `<div class="tt"><span>🎁 Pontos (saldo ${ptsBalance})</span><span><input class="inp mono" id="ck-pts" type="number" min="0" max="${ptsMax}" value="${CK.pointsUsed}" style="width:80px;display:inline-block;padding:6px"> <button class="btn sm navy" onclick="ckApplyPoints()">OK</button></span></div>${ptsOff ? `<div class="tt"><span>Desconto pontos</span><b style="color:var(--ok)">−${BRL(ptsOff)}</b></div>` : ''}<small class="mut">10 pontos = R$ 1 • máx ${ptsMax} neste pedido</small>` : ''}
     <div class="tt"><span>Frete (${esc(CK.shipLabel || CK.shipType)})</span>${ship === 0 ? '<span class="free">GRÁTIS 🎉</span>' : `<b>${BRL(ship)}</b>`}</div>
     <div class="tt gt"><span>Total</span><span>${BRL(total)}</span></div>
     ${CK.pay === 'card' ? `<small class="mut">em até ${CONFIG.installmentMax || 6}x de ${BRL(total / (CONFIG.installmentMax || 6))} sem juros</small>` : ''}</div>`;
+}
+function ckApplyPoints() {
+  CK.pointsUsed = Math.max(0, Math.floor(Number(document.querySelector('#ck-pts')?.value) || 0));
+  ckTotals();
+  toast(CK.pointsUsed ? CK.pointsUsed + ' pontos aplicados! 🎁' : 'Pontos removidos', 'ok');
 }
 async function ckFinish() {
   const pickup = CK.shipType === 'Retirada';
@@ -343,7 +375,7 @@ async function ckFinish() {
       method: 'POST',
       body: JSON.stringify({
         items: Cart.items.map(i => ({ productId: i.productId, sel: i.sel, configLabel: i.configLabel })),
-        address: addr, shippingType: CK.shipType, shippingLabel: CK.shipLabel || CK.shipType, paymentMethod: CK.pay,
+        address: addr, shippingType: CK.shipType, shippingLabel: CK.shipLabel || CK.shipType, paymentMethod: CK.pay, pointsUsed: CK.pointsUsed || 0,
         coupon: CK.coupon?.code || null, art: CK.art ? { url: CK.art.url, name: CK.art.name } : null,
       })
     });
