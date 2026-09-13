@@ -263,9 +263,18 @@ function ckSetShip(v) {
 function ckSetPay(v) { CK.pay = v; $$('.paym button').forEach(b => b.classList.toggle('on', b.dataset.pay === v)); ckTotals(); }
 async function ckArt(input) {
   const f = input.files[0]; if (!f) return;
-  toast('Enviando arte... ⏳');
-  try { CK.art = await uploadFile(f); $('#ck-art-ok').innerHTML = `✅ <b>${esc(f.name)}</b> enviado! Você também pode enviar depois, na sua conta.`; }
-  catch (e) { toast(e.message, 'err'); }
+  const btn = document.querySelector('#ck-art-btn');
+  if (btn) { btn.disabled = true; btn.innerHTML = 'Enviando...'; }
+  toast('Enviando arte... aguarde');
+  try {
+    CK.art = await uploadFile(f);
+    document.querySelector('#ck-art-ok').innerHTML = `✅ <b>${esc(f.name)}</b> anexado ao pedido!`;
+    if (btn) { btn.disabled = false; btn.innerHTML = 'Trocar arte'; }
+    toast('Arte anexada! Pode finalizar 🎨', 'ok');
+  } catch (err) {
+    toast(err.message, 'err');
+    if (btn) { btn.disabled = false; btn.innerHTML = '📤 Enviar arte'; }
+  }
 }
 function ckTotals() {
   const sub = Cart.subtotal();

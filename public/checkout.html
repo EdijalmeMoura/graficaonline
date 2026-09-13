@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=15"></head>
+<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=16"></head>
 <body data-page="checkout">
 <div id="site-header"></div>
 <div class="wrap">
@@ -27,8 +27,9 @@
       <div class="card"><h3>💳 Pagamento</h3>
         <div class="paym" id="ck-paym"></div></div>
       <div class="card"><h3>🎨 Arte do pedido <span class="small mut">(opcional agora)</span></h3>
-        <label class="filebox" style="display:block">📤 <b>Clique para enviar sua arte</b><br><span class="small mut">PDF, JPG, PNG, AI, PSD, CDR — até 60MB</span>
-        <input type="file" hidden onchange="ckArt(this)"></label><div id="ck-art-ok" class="small" style="margin-top:8px"></div></div>
+        <p class="small mut" style="margin:0 0 10px">PDF, JPG, PNG, AI, PSD, CDR — até 60MB. Pode enviar depois, na sua conta.</p>
+        <input type="file" id="ck-art-input" hidden onchange="ckArt(this)">
+        <button class="btn navy" id="ck-art-btn" onclick="document.querySelector('#ck-art-input').click()">📤 Enviar arte</button><div id="ck-art-ok" class="small" style="margin-top:8px"></div></div>
     </div>
     <div><div class="card"><h3>🧾 Seu pedido</h3><div id="ck-items" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px"></div>
       <div class="coupon"><input class="inp" id="ck-coupon" placeholder="Cupom (ex: BEMVINDO10)"><button class="btn navy" onclick="ckApplyCoupon()">OK</button></div>
@@ -38,5 +39,5 @@
   </div>
 </div>
 <div id="site-footer"></div>
-<script src="/js/app.js?v=15"></script><script src="/js/shop.js?v=15"></script>
+<script src="/js/app.js?v=16"></script><script src="/js/shop.js?v=16"></script>
 </body></html>
