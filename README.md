@@ -32,6 +32,17 @@ Logins de demonstração (criados no seed):
 > após ~15 min sem acesso (acorda em ~1 min). Para produção real, use um
 > banco externo (ex: Render Postgres) + disco persistente.
 
+## 🐳 Rodar com Docker
+
+```bash
+# descompacte o zip, entre na pasta e suba:
+docker compose up --build -d
+# http://localhost:3000
+```
+
+Os dados (banco + uploads) ficam em volumes Docker e sobrevivem a
+reinicializações. Para trocar o segredo JWT: `JWT_SECRET=meusegredo docker compose up -d`.
+
 ## 🛠️ Stack
 
 Node.js + Express (sem build), dados em JSON, upload com Multer, auth JWT.

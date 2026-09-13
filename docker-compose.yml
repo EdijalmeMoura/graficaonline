@@ -1,0 +1,15 @@
+services:
+  primeprint:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - primeprint-data:/app/data
+      - primeprint-uploads:/app/uploads
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-troque-este-segredo-em-producao}
+    restart: unless-stopped
+
+volumes:
+  primeprint-data:
+  primeprint-uploads:
