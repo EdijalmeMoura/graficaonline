@@ -116,7 +116,7 @@ function viewOrderDetail(id) {
         ${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
         <p class="small mut">Subtotal ${BRL(o.subtotal)} • Desconto ${BRL(o.discount)} ${o.coupon ? '(' + o.coupon + ')' : ''} • Frete ${BRL(o.shipping)} (${o.shippingType}) • Pagto: ${o.payment.method} (<b>${o.payment.status}</b>) <button class="btn sm ${o.payment.status === 'paid' ? 'ok' : 'navy'}" onclick="togglePay('${o.id}','${o.payment.status === 'paid' ? 'pending' : 'paid'}')">${o.payment.status === 'paid' ? '✓ Pago' : 'Marcar como pago'}</button></p>
         <p class="small">📍 ${esc(o.address?.street || '')} — ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} • CEP ${esc(o.address?.zip || '')}</p>
-        <button class="btn sm ghost" onclick="toast('Etiqueta enviada para impressão! 🖨️','ok')">🖨️ Imprimir etiqueta</button></div>
+        <button class="btn sm ghost" onclick="toast('Etiqueta enviada para impressão! 🖨️','ok')">🖨️ Imprimir etiqueta</button> <button class="btn sm navy" onclick="printSlip('${o.id}')">🧾 Ficha de produção</button></div>
       <div>
         <div class="panel"><h3>🎨 Análise de arte</h3>
           ${o.art?.file ? `<p>📎 <a class="link-more" href="${o.art.file}" target="_blank">${esc(o.art.originalName || 'abrir arquivo')}</a> <span class="st st-${o.art.status}">${o.art.status}</span></p>
@@ -145,6 +145,19 @@ async function togglePay(id, to) {
   await api(`/api/orders/${id}/pay`, { method: 'PUT', body: JSON.stringify({ status: to }) });
   toast('Pagamento atualizado! 💳', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id);
 }
+function printSlip(id) {
+  const o = ORDERS.find(x => x.id === id);
+  const w = window.open('', '_blank', 'width=820,height=900');
+  w.document.write(`<html><head><title>Ficha ${o.code}</title><style>body{font-family:Arial,sans-serif;padding:28px;color:#111}h1{font-size:22px;border-bottom:3px solid #111;padding-bottom:8px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border:1px solid #666;padding:8px;font-size:13px;text-align:left}.hd{background:#eee}button{margin:16px 0;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer}@media print{button{display:none}}</style></head><body>
+  <h1>🧾 FICHA DE PRODUÇÃO — ${o.code}</h1>
+  <p><b>Cliente:</b> ${esc(o.customer?.name || '')} • ${esc(o.customer?.phone || '')} • ${esc(o.customer?.email || '')}<br><b>Data:</b> ${fmtDT(o.createdAt)} • <b>Status:</b> ${STATUS[o.status]} • <b>Envio:</b> ${o.shippingType}${o.tracking ? ' • <b>Rastreio:</b> ' + esc(o.tracking) : ''}</p>
+  <table><tr class="hd"><th>Item</th><th>Configuração</th><th>Qtd</th></tr>${o.items.map(i => `<tr><td><b>${esc(i.name)}</b></td><td>${esc(i.config)}</td><td>${i.qty.toLocaleString('pt-BR')} un</td></tr>`).join('')}</table>
+  <p><b>Arte:</b> ${o.art?.file ? esc(o.art.originalName || 'enviada') + ' (' + o.art.status + ')' : '⚠️ PENDENTE'}<br><b>Pagamento:</b> ${o.payment.method} (${o.payment.status}) • <b>Total:</b> ${BRL(o.total)}</p>
+  <p><b>Entrega:</b> ${esc(o.address?.street || '')} — ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} CEP ${esc(o.address?.zip || '')}</p>
+  <p>Conferência: ________________________________________ &nbsp;&nbsp; Data: ____/____/____</p>
+  <button onclick="window.print()">🖨️ Imprimir ficha</button></body></html>`);
+  w.document.close();
+}
 function viewKanban() {
   const cols = ['em_analise', 'aprovado', 'em_producao', 'pronto_envio', 'enviado'];
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🏭 Produção</h1><p>Arraste mentalmente: troque o status pelo seletor do cartão</p></div></div>
@@ -161,20 +174,28 @@ async function viewProducts() {
   const all = await api('/api/products'); // todos
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🖨️ Produtos</h1><p>${PRODUCTS.length} produto(s) no catálogo</p></div>
     <button class="btn" style="margin-left:auto" onclick="editProduct()">＋ Novo produto</button></div>
-  <div class="panel"><div style="overflow:auto"><table class="tbl"><tr><th>Produto</th><th>Categoria</th><th>A partir de</th><th>Vendidos</th><th>Status</th><th></th></tr>
+  <div class="panel"><input class="inp" placeholder="🔍 Buscar produto..." oninput="filterProds(this.value)" style="max-width:300px;margin-bottom:10px"><div style="overflow:auto"><table class="tbl" id="prods-table"><tr><th>Produto</th><th>Categoria</th><th>A partir de</th><th>Vendidos</th><th>Status</th><th></th></tr>
   ${PRODUCTS.map(p => `<tr><td><span class="t-ic" style="background:linear-gradient(135deg,${p.grad[0]},${p.grad[1]})">${thumbHTML(p)}</span><b>${esc(p.name)}</b>${p.badge ? ` <span class="badge sale">${esc(p.badge)}</span>` : ''}<br><span class="small mut">${esc(p.tagline || '')}</span></td>
     <td>${esc(CATS.find(c => c.id === p.category)?.name || p.category)}</td><td><b>${BRL(Math.min(...p.quantities.map(q => q.price)))}</b></td><td>${(p.sold || 0).toLocaleString('pt-BR')}</td>
     <td>${p.active !== false ? '<span class="badge ok">Ativo</span>' : '<span class="badge mut">Inativo</span>'}</td>
     <td style="white-space:nowrap"><button class="btn sm ghost" title="Duplicar" onclick="dupProduct('${p.id}')">📋</button> <button class="btn sm ghost" onclick="editProduct('${p.id}')">✏️</button> <button class="btn sm ghost" onclick="toggleProduct('${p.id}',${p.active === false})">${p.active === false ? '✅' : '⏸️'}</button> <button class="btn sm danger" onclick="delProduct('${p.id}')">🗑️</button></td></tr>`).join('')}</table></div></div>`;
 }
+function filterProds(q) {
+  q = q.toLowerCase();
+  document.querySelectorAll('#prods-table tr').forEach((tr, i) => {
+    if (i === 0) return;
+    tr.style.display = tr.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
 function editProduct(id) {
   const p = PRODUCTS.find(x => x.id === id) || { name: '', category: CATS[1]?.id || '', icon: '🖨️', grad: ['#0B1E3B', '#1E5AA8'], tagline: '', desc: '', badge: '', quantities: [{ qty: 100, price: 49.9 }, { qty: 500, price: 99.9 }] };
+  if (!id && PRODUCTS[0]) { p.formats = PRODUCTS[0].formats; p.papers = PRODUCTS[0].papers; p.colors = PRODUCTS[0].colors; p.finishes = PRODUCTS[0].finishes; }
   openModal(`<div class="mh"><h3 style="margin:0">${id ? '✏️ Editar' : '＋ Novo'} produto</h3><button class="btn sm ghost" onclick="closeModal()">✕</button></div>
   <div class="mb"><form onsubmit="saveProduct(event,'${id || ''}')">
     <div class="row2"><div><label class="lbl">Nome</label><input class="inp" name="name" value="${esc(p.name)}" required></div>
     <div><label class="lbl">Categoria</label><select class="inp" name="category">${CATS.map(c => `<option value="${c.id}" ${c.id === p.category ? 'selected' : ''}>${c.icon} ${esc(c.name)}</option>`).join('')}</select></div></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Ícone (emoji)</label><input class="inp" name="icon" value="${esc(p.icon || '🖨️')}"></div>
-    <div><label class="lbl">Selo (opcional)</label><input class="inp" name="badge" value="${esc(p.badge || '')}" placeholder="Ex: Oferta, Novo"></div></div><div class="row2" style="margin-top:8px"><div><label class="lbl">🎨 Cor fundo 1</label><input type="color" class="inp" name="grad0" value="${esc(p.grad?.[0] || '#0B1E3B')}" style="height:44px;padding:4px;cursor:pointer"></div><div><label class="lbl">🎨 Cor fundo 2</label><input type="color" class="inp" name="grad1" value="${esc(p.grad?.[1] || '#FF4D00')}" style="height:44px;padding:4px;cursor:pointer"></div></div><div style="margin-top:10px"><label style="font-weight:700;font-size:14px"><input type="checkbox" name="active" ${p.active !== false ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Produto ativo (visível na loja)</label></div>
+    <div><label class="lbl">Selo (opcional)</label><input class="inp" name="badge" value="${esc(p.badge || '')}" placeholder="Ex: Oferta, Novo"></div></div><div class="row2" style="margin-top:8px"><div><label class="lbl">🎨 Cor fundo 1</label><input type="color" class="inp" name="grad0" value="${esc(p.grad?.[0] || '#0B1E3B')}" style="height:44px;padding:4px;cursor:pointer"></div><div><label class="lbl">🎨 Cor fundo 2</label><input type="color" class="inp" name="grad1" value="${esc(p.grad?.[1] || '#FF4D00')}" style="height:44px;padding:4px;cursor:pointer"></div></div><div style="margin-top:10px"><label style="font-weight:700;font-size:14px"><input type="checkbox" name="active" ${p.active !== false ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Produto ativo (visível na loja)</label></div><details style="margin-top:10px;background:var(--bg);border-radius:10px;padding:10px 12px"><summary style="cursor:pointer;font-weight:700">⚙️ Variações avançadas (tamanhos, papéis, cores, acabamentos)</summary><p class="small mut">Formato JSON • "mod" multiplica o preço (0.1 = +10%) • "add" soma R$ • Deixe como está se não souber.</p><label class="lbl">Tamanhos (formats)</label><textarea class="inp mono" name="formats" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.formats || [], null, 1))}</textarea><label class="lbl" style="margin-top:6px">Papéis (papers)</label><textarea class="inp mono" name="papers" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.papers || [], null, 1))}</textarea><label class="lbl" style="margin-top:6px">Cores (colors)</label><textarea class="inp mono" name="colors" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.colors || [], null, 1))}</textarea><label class="lbl" style="margin-top:6px">Acabamentos (finishes)</label><textarea class="inp mono" name="finishes" rows="3" style="font-size:11.5px">${esc(JSON.stringify(p.finishes || [], null, 1))}</textarea></details>
     <div style="margin-top:8px"><label class="lbl">Chamada curta</label><input class="inp" name="tagline" value="${esc(p.tagline || '')}"></div>
     <div style="margin-top:8px"><label class="lbl">Descrição</label><textarea class="inp" name="desc" rows="2">${esc(p.desc || '')}</textarea></div>
     <div style="margin-top:8px"><label class="lbl">Tabela de quantidades (qty:preço, separados por vírgula)</label><input class="inp mono" name="quantities" value="${p.quantities.map(q => q.qty + ':' + q.price).join(', ')}"></div><div style="margin-top:8px"><label class="lbl">📷 Foto do produto</label><div id="ep-imgprev">${p.img ? `<img src="${p.img}" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-bottom:8px">` : ''}</div><div class="row2"><div><label class="filebox" style="display:block;padding:12px">📤 <b>Enviar foto</b><input type="file" hidden accept="image/*" onchange="epUpload(this)"></label></div><div><input class="inp" name="img" value="${esc(p.img || '')}" placeholder="ou cole a URL da imagem"></div></div></div>
@@ -189,10 +210,18 @@ async function saveProduct(e, id) {
   if (imgVal) body.img = imgVal;
   body.grad = [f.grad0.value, f.grad1.value];
   body.active = f.active.checked;
+  const adv = {};
+  for (const k of ['formats', 'papers', 'colors', 'finishes']) {
+    const raw = (f[k].value || '').trim();
+    if (!raw) continue;
+    try { adv[k] = JSON.parse(raw); if (!Array.isArray(adv[k]) || !adv[k].length) throw 0; }
+    catch { toast('JSON inválido em "' + k + '" — confira colchetes e aspas', 'err'); return; }
+  }
+  Object.assign(body, adv);
   if (id) await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify(body) });
   else {
     const base = PRODUCTS[0];
-    await api('/api/products', { method: 'POST', body: JSON.stringify({ ...body, formats: base.formats, papers: base.papers, colors: base.colors, finishes: base.finishes, deadlines: base.deadlines }) });
+    await api('/api/products', { method: 'POST', body: JSON.stringify({ ...body, formats: adv.formats || base.formats, papers: adv.papers || base.papers, colors: adv.colors || base.colors, finishes: adv.finishes || base.finishes, deadlines: base.deadlines }) });
   }
   closeModal(); toast('Produto salvo! ✅', 'ok'); viewProducts();
 }
