@@ -1,14 +1,10 @@
-# Deploy com 1 clique na Render (https://render.com)
 services:
   - type: web
-    name: primeprint-grafica
-    env: node
+    name: primeprint
+    runtime: node
+    plan: free
     buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: JWT_SECRET
         generateValue: true
-      - key: PUBLIC_URL
-        sync: false
-      - key: MP_ACCESS_TOKEN
-        sync: false
