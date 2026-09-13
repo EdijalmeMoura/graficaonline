@@ -80,7 +80,7 @@ function closeModal() { $('#modal')?.classList.remove('on'); }
 let CATS = [], CONFIG = {};
 async function loadGlobals() {
   try { [CATS, CONFIG] = await Promise.all([api('/api/categories'), api('/api/config')]); }
-  catch { CATS = []; CONFIG = { storeName: 'PrimePrint', phone: '(81) 3011-3399', email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h', whatsapp: '5581999990000' }; }
+  catch { CATS = []; CONFIG = { storeName: 'PrimePrint', phone: '(81) 9963-6568', email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h', whatsapp: '558199636568' }; }
 }
 function renderHeader() {
   const u = Auth.user;
@@ -140,7 +140,7 @@ function renderFooter() {
   </div>
   <div class="copy">© 2026 ${esc(CONFIG.storeName || 'PrimePrint')} • CNPJ 00.000.000/0001-00 • Todos os direitos reservados • Feito com 🧡 no Brasil</div>
   </footer>
-  <a class="wpp" href="https://wa.me/${CONFIG.whatsapp || '5581999990000'}?text=Olá! Quero um orçamento 🖨️" target="_blank" title="Falar no WhatsApp">💬</a>`;
+  <a class="wpp" href="https://wa.me/${CONFIG.whatsapp || '558199636568'}?text=Olá! Quero um orçamento 🖨️" target="_blank" title="Falar no WhatsApp">💬</a>`;
 }
 function renderMiniCart() {
   const box = $('#mini-items');
