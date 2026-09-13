@@ -433,7 +433,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 3011-3399', whatsapp: '5581999990000',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '',
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '',
   };
 
   return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, messages: [], config };
@@ -480,7 +480,7 @@ function calcPrice(product, sel = {}) {
    ROTAS — PÚBLICO
    ============================================================ */
 app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-app.get('/api/config', (req, res) => { const { mpToken, ...pub } = loadDB().config; res.json(pub); });
+app.get('/api/config', (req, res) => { const { mpToken, stoneToken, ...pub } = loadDB().config; res.json(pub); });
 app.get('/api/categories', (req, res) => {
   const db = loadDB();
   const withCount = db.categories.map(c => ({ ...c, count: db.products.filter(p => p.category === c.id && p.active !== false).length }));
@@ -819,7 +819,8 @@ app.put('/api/admin/messages/:id', auth, admin, (req, res) => {
    Sem token, o checkout segue em modo simulação.
    ============================================================ */
 const mpToken = () => loadDB().config.mpToken || process.env.MP_ACCESS_TOKEN || '';
-app.get('/api/pay/status', (req, res) => { const c = loadDB().config; const tk = mpToken(); res.json({ mercadopago: !!tk && (c.mpEnabled || !!process.env.MP_ACCESS_TOKEN), hasToken: !!tk }); });
+const stoneToken = () => loadDB().config.stoneToken || process.env.STONE_ACCESS_TOKEN || '';
+app.get('/api/pay/status', (req, res) => { const c = loadDB().config; const tk = mpToken(); const st = stoneToken(); res.json({ mercadopago: !!tk && (c.mpEnabled || !!process.env.MP_ACCESS_TOKEN), hasToken: !!tk, stone: { active: !!st && (c.stoneEnabled || !!process.env.STONE_ACCESS_TOKEN), hasToken: !!st } }); });
 app.post('/api/pay/mp-preference', auth, async (req, res) => {
   const tk = mpToken();
   if (!tk) return res.status(400).json({ error: 'not-configured' });

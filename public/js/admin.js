@@ -392,7 +392,7 @@ async function viewPayments() {
   const on = v => v !== false ? 'checked' : '';
   const sw = 'display:flex;gap:10px;align-items:center;padding:12px;border:1.5px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:#fff';
   $('#view').innerHTML = `
-    <div class="main-hd"><div><h1>💳 Pagamentos</h1><p>Quais formas aparecem no checkout ${mp.mercadopago ? '<span class="badge ok">MP ATIVO</span>' : '<span class="small mut">• modo simulação</span>'}</p></div></div>
+    <div class="main-hd"><div><h1>💳 Pagamentos</h1><p>Quais formas aparecem no checkout ${mp.mercadopago ? '<span class="badge ok">MP ATIVO</span>' : ''}${mp.stone?.active ? ' <span class="badge ok">STONE ATIVA</span>' : ''}${!mp.mercadopago && !mp.stone?.active ? ' <span class="small mut">• modo simulação</span>' : ''}</p></div></div>
     <form onsubmit="savePayments(event)">
     <div class="panel"><h3>💰 Métodos no checkout</h3>
       <label style="${sw}"><input type="checkbox" name="payPix" ${on(c.payPix)} style="width:20px;height:20px"> <b>⚡ Pix</b> <span class="mut small">aprovação imediata + desconto %</span></label>
@@ -415,12 +415,18 @@ async function viewPayments() {
       <div style="margin-top:8px;max-width:520px"><label class="lbl">Access Token (produção ou teste)</label><input class="inp mono" name="mpToken" type="password" value="" placeholder="${mp.hasToken ? '•••••• token salvo (digite para trocar)' : 'APP_USR-...'}"></div>
       <p class="small mut">Pegue em <b>mercadopago.com.br → Suas integrações → Credenciais</b>. Comece com o token de TESTE. Status: ${mp.mercadopago ? '<b style="color:var(--ok)">conectado ✅</b>' : '<b>desconectado</b> (checkout em simulação)'}.</p>
     </div>
+    <div class="panel"><h3>🟢 Stone <span class="small mut">(recebimento real)</span></h3>
+      <label style="font-weight:700"><input type="checkbox" name="stoneEnabled" ${c.stoneEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar Stone</label>
+      <div style="margin-top:8px;max-width:520px"><label class="lbl">Access Token da Stone</label><input class="inp mono" name="stoneToken" type="password" value="" placeholder="${mp.stone?.hasToken ? '•••••• token salvo (digite para trocar)' : 'Cole o access token'}"></div>
+      <p class="small mut">Pegue no painel da Stone → API/Integrações. Status: ${mp.stone?.active ? '<b style="color:var(--ok)">conectado ✅</b>' : '<b>desconectado</b>'}.</p>
+    </div>
     <button class="btn big">Salvar pagamentos ✅</button></form>`;
 }
 async function savePayments(e) {
   e.preventDefault(); const f = e.target;
-  const body = { payPix: f.payPix.checked, payCard: f.payCard.checked, payBoleto: f.payBoleto.checked, pixKey: f.pixKey.value.trim(), pixName: f.pixName.value.trim(), pixDiscount: Number(f.pixDiscount.value) || 0, installmentMax: Number(f.installmentMax.value) || 1, mpEnabled: f.mpEnabled.checked };
+  const body = { payPix: f.payPix.checked, payCard: f.payCard.checked, payBoleto: f.payBoleto.checked, pixKey: f.pixKey.value.trim(), pixName: f.pixName.value.trim(), pixDiscount: Number(f.pixDiscount.value) || 0, installmentMax: Number(f.installmentMax.value) || 1, mpEnabled: f.mpEnabled.checked, stoneEnabled: f.stoneEnabled.checked };
   if (f.mpToken.value.trim()) body.mpToken = f.mpToken.value.trim();
+  if (f.stoneToken.value.trim()) body.stoneToken = f.stoneToken.value.trim();
   if (!body.payPix && !body.payCard && !body.payBoleto) { toast('Ative ao menos 1 método!', 'err'); return; }
   CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify(body) });
   toast('Pagamentos salvos! 💳', 'ok'); viewPayments();
