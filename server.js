@@ -509,6 +509,10 @@ app.post('/api/products/:id/price', (req, res) => {
   if (!p) return res.status(404).json({ error: 'Produto não encontrado' });
   res.json(calcPrice(p, req.body));
 });
+app.get('/api/coupons/public', (req, res) => {
+  const today = new Date().toISOString().slice(0, 10);
+  res.json(loadDB().coupons.filter(c => c.active && (!c.expires || c.expires >= today) && c.used < c.maxUses).map(c => ({ code: c.code, desc: c.desc, min: c.min, type: c.type, value: c.value, expires: c.expires })));
+});
 app.post('/api/coupons/validate', (req, res) => {
   const { code, subtotal = 0 } = req.body;
   const c = loadDB().coupons.find(x => x.code === String(code || '').toUpperCase().trim() && x.active);

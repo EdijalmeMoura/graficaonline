@@ -53,6 +53,14 @@ function timeline(o) {
   }).join('')}</div>`;
 }
 
+function spendChart() {
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) { const d = new Date(now.getFullYear(), now.getMonth() - i, 1); months.push({ k: d.getFullYear() + '-' + d.getMonth(), label: d.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', ''), total: 0 }); }
+  ORDERS.filter(o => o.status !== 'cancelado').forEach(o => { const d = new Date(o.createdAt); const m = months.find(m => m.k === d.getFullYear() + '-' + d.getMonth()); if (m) m.total += o.total; });
+  const max = Math.max(...months.map(m => m.total), 1);
+  return `<div class="panel"><h3>📊 Seus gastos — últimos 6 meses</h3><div style="display:flex;align-items:flex-end;gap:10px;height:160px;padding-top:6px">${months.map(m => `<div style="flex:1;text-align:center"><div style="font-size:11px;font-weight:700;min-height:16px">${m.total ? BRL(m.total) : ''}</div><div style="height:${Math.max(5, Math.round(m.total / max * 105))}px;background:linear-gradient(180deg,var(--primary),var(--navy));border-radius:6px 6px 0 0"></div><div class="small mut">${m.label}</div></div>`).join('')}</div></div>`;
+}
 /* ---------- Visão geral ---------- */
 function viewHome() {
   const u = Auth.user;
@@ -70,6 +78,7 @@ function viewHome() {
       <div class="kpi c4"><div class="ki">🎨</div><span>Artes pendentes</span><b>${ORDERS.filter(o => o.status === 'aguardando_arte').length}</b><small>aguardando envio</small></div>
     </div>
     ${ORDERS.filter(o => o.status === 'aguardando_arte').length ? `<div class="panel" style="border-left:4px solid var(--warn)"><b>⚠️ Você tem pedido(s) aguardando arte!</b> <span class="mut">Envie para não atrasar a produção.</span> <a class="link-more" href="#/pedidos">Enviar agora →</a></div>` : ''}
+    ${spendChart()}
     <div class="panel"><h3>🕘 Últimos pedidos</h3>
       ${ORDERS.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Total</th><th>Status</th><th></th></tr>
       ${ORDERS.slice(0, 5).map(o => `<tr><td><b>${o.code}</b></td><td>${fmtDate(o.createdAt)}</td><td>${o.items.map(i => i.icon + ' ' + esc(i.name)).join('<br>')}</td><td><b>${BRL(o.total)}</b></td><td>${stTag(o.status)}</td><td><a class="btn sm ghost" href="#/pedido?id=${o.id}">Ver</a></td></tr>`).join('')}</table></div>`
@@ -81,12 +90,14 @@ function viewOrders() {
   $('#view').innerHTML = `
     <div class="main-hd"><div><h1>📦 Meus pedidos</h1><p>${ORDERS.length} pedido(s) • clique para ver detalhes e enviar artes</p></div></div>
     <div class="tabs"><button data-f="" class="on" onclick="filterOrders('',this)">Todos</button><button data-f="aguardando_arte" onclick="filterOrders('aguardando_arte',this)">Aguard. arte</button><button data-f="em_producao" onclick="filterOrders('em_producao',this)">Em produção</button><button data-f="enviado" onclick="filterOrders('enviado',this)">Enviados</button><button data-f="entregue" onclick="filterOrders('entregue',this)">Entregues</button></div>
-    <div class="panel" id="orders-box"></div>`;
+    <input class="inp" id="order-q" placeholder="Buscar por codigo ou produto..." oninput="filterOrders(curTab())" style="max-width:320px;margin-bottom:10px"><div class="panel" id="orders-box"></div>`;
   filterOrders('');
 }
+function curTab() { return document.querySelector('.tabs button.on')?.dataset.f || ''; }
 function filterOrders(s) {
   $$('.tabs button').forEach(b => b.classList.toggle('on', b.textContent.toLowerCase().includes(s ? STATUS[s].split(' ')[0].toLowerCase() : 'todos')));
-  const list = s ? ORDERS.filter(o => o.status === s) : ORDERS;
+  const q = ($('#order-q')?.value || '').toLowerCase();
+  const list = (s ? ORDERS.filter(o => o.status === s) : ORDERS).filter(o => !q || (o.code + ' ' + o.items.map(i => i.name).join(' ')).toLowerCase().includes(q));
   $('#orders-box').innerHTML = list.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Pagamento</th><th>Total</th><th>Status</th><th></th></tr>
     ${list.map(o => `<tr><td><b>${o.code}</b>${o.tracking ? `<br><span class="small mono">${esc(o.tracking)}</span>` : ''}</td><td>${fmtDate(o.createdAt)}</td>
     <td>${o.items.map(i => `${i.icon} ${esc(i.name)} <span class="mut">(${i.qty.toLocaleString('pt-BR')} un)</span>`).join('<br>')}</td>
@@ -115,9 +126,21 @@ function viewOrderDetail(id) {
         </div>
         <div class="panel"><h3>🚚 Entrega e pagamento</h3>
           <p class="small">📍 ${esc(o.address?.street || '')} • ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} • CEP ${esc(o.address?.zip || '')}<br>🚚 ${o.shippingType} • 💳 ${o.payment.method === 'pix' ? 'Pix' : o.payment.method === 'card' ? 'Cartão' : 'Boleto'} (${o.payment.status === 'paid' ? 'pago ✅' : 'aguardando pagamento ⏳'})</p>
-          <button class="btn sm ghost" onclick="toast('Nota fiscal enviada para seu e-mail! 🧾','ok')">🧾 2ª via da NF</button></div>
+          <button class="btn sm ghost" onclick="toast('Nota fiscal enviada para seu e-mail! 🧾','ok')">🧾 2ª via da NF</button> <button class="btn sm navy" onclick="printReceipt('${o.id}')">Comprovante</button></div>
       </div>
     </div>`;
+}
+function printReceipt(id) {
+  const o = ORDERS.find(x => x.id === id);
+  const w = window.open('', '_blank', 'width=760,height=900');
+  w.document.write(`<html><head><title>Comprovante ${o.code}</title><style>body{font-family:Arial,sans-serif;padding:32px;max-width:640px;margin:auto;color:#111}h1{font-size:20px;text-align:center}table{width:100%;border-collapse:collapse;margin:14px 0}td,th{border:1px solid #999;padding:8px;font-size:13px;text-align:left}.c{text-align:center;color:#555;font-size:12px}button{display:block;margin:20px auto;padding:12px 30px;font-size:15px;font-weight:700;cursor:pointer}@media print{button{display:none}}</style></head><body>
+  <h1>COMPROVANTE DE PEDIDO — ${o.code}</h1><p class="c">${fmtDT(o.createdAt)}</p>
+  <table><tr><th>Item</th><th>Configuração</th><th>Qtd</th><th>Total</th></tr>${o.items.map(i => `<tr><td><b>${esc(i.name)}</b></td><td>${esc(i.config)}</td><td>${i.qty.toLocaleString('pt-BR')} un</td><td>${BRL(i.total)}</td></tr>`).join('')}</table>
+  <p>Subtotal: ${BRL(o.subtotal)}${o.discount ? `<br>Desconto${o.coupon ? ' (' + o.coupon + ')' : ''}: −${BRL(o.discount)}` : ''}<br>Frete (${o.shippingType}): ${o.shipping ? BRL(o.shipping) : 'GRATIS'}<br><b>TOTAL: ${BRL(o.total)}</b><br>Pagamento: ${o.payment.method} (${o.payment.status})</p>
+  <p class="c">Entrega: ${esc(o.address?.street || '')} — ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} CEP ${esc(o.address?.zip || '')}</p>
+  <p class="c">Obrigado pela preferencia!</p>
+  <button onclick="window.print()">Imprimir</button></body></html>`);
+  w.document.close();
 }
 async function sendArt(orderId, input) {
   const f = input.files[0]; if (!f) return;
@@ -182,12 +205,19 @@ async function viewFavs() {
   $('#view').innerHTML = `<div class="main-hd"><div><h1>❤️ Favoritos</h1><p>${list.length} produto(s) salvos</p></div></div>
   ${list.length ? `<div class="prod-grid">${list.map(productCard).join('')}</div>` : `<div class="panel"><div class="empty"><div class="e">🤍</div><p>Toque no 🤍 dos produtos para salvar aqui.<br><br><a class="btn" href="/produtos.html">Explorar produtos</a></p></div></div>`}`;
 }
-function viewCoupons() {
-  $('#view').innerHTML = `<div class="main-hd"><div><h1>🎟️ Meus cupons</h1><p>Use no checkout e economize</p></div></div>
-  <div class="grid2">
-    ${[['BEMVINDO10', '10% OFF acima de R$ 100', '🔥'], ['PRINT15', '15% OFF acima de R$ 300', '💎'], ['FRETEGRATIS', 'Frete grátis acima de R$ 299', '🚚']].map(([c, d, i]) => `
-    <div class="panel" style="border:2px dashed var(--primary);text-align:center"><div style="font-size:34px">${i}</div><h2 class="mono">${c}</h2><p class="mut">${d}</p><button class="btn sm navy" onclick="navigator.clipboard?.writeText('${c}');toast('Cupom ${c} copiado! 🎟️','ok')">Copiar código</button></div>`).join('')}
-  </div>`;
+async function viewCoupons() {
+  const used = new Set(ORDERS.map(o => o.coupon).filter(Boolean));
+  let list = [];
+  try { list = await api('/api/coupons/public'); } catch { }
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>🎟️ Meus cupons</h1><p>Clique para copiar e use no checkout</p></div></div>
+  ${list.length ? `<div class="grid2">${list.map(c => `
+    <div class="panel" style="border:2px ${used.has(c.code) ? 'solid var(--ok)' : 'dashed var(--primary)'};text-align:center;${used.has(c.code) ? 'opacity:.8' : ''}">
+      <div style="font-size:34px">${c.type === 'freeship' ? '🚚' : c.type === 'fixed' ? '💵' : '🎟️'}</div>
+      <h2 class="mono">${c.code}</h2><p class="mut">${esc(c.desc)}</p>
+      <p class="small mut">Mínimo: ${BRL(c.min)}${c.expires ? ' • até ' + c.expires.split('-').reverse().join('/') : ''}</p>
+      ${used.has(c.code) ? '<span class="badge ok">✅ Você já usou</span>' : `<button class="btn sm navy" onclick="navigator.clipboard?.writeText('${c.code}');toast('Cupom ${c.code} copiado! 🎟️','ok')">Copiar código</button>`}
+    </div>`).join('')}</div>`
+  : `<div class="panel"><div class="empty"><div class="e">🎟️</div><p>Nenhum cupom disponível no momento.</p></div></div>`}`;
 }
 function viewProfile() {
   const u = Auth.user;
