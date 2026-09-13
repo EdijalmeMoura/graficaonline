@@ -92,7 +92,6 @@ function renderHeader() {
     <span>📞 ${esc(CONFIG.phone || '')} &nbsp;•&nbsp; ✉️ ${esc(CONFIG.email || '')} &nbsp;•&nbsp; 🕘 ${esc(CONFIG.hours || '')}</span>
   </div></div>
   <div class="hd-main"><div class="wrap">
-    <button class="btn navy sm burger" onclick="document.querySelector('.mnav').classList.add('on');document.querySelector('#overlay').classList.add('on')">☰</button>
     <a class="logo" href="/index.html">${LOGO_SVG}<span>${esc(CONFIG.storeName || 'PrimePrint')}<small>GRÁFICA ONLINE</small></span></a>
     <form class="search" onsubmit="event.preventDefault();location.href='/produtos.html?q='+encodeURIComponent(this.q.value)">
       <input name="q" placeholder="Busque por cartões, panfletos, banners..." value="${esc(new URLSearchParams(location.search).get('q') || '')}">
@@ -110,13 +109,7 @@ function renderHeader() {
     ${CATS.slice(0, 9).map(c => `<a href="/produtos.html?cat=${c.id}">${c.icon} ${esc(c.name)}</a>`).join('')}
     <a class="hl" href="/pagina.html?p=gabaritos">📐 Gabaritos</a>
   </div></nav>
-  <div class="mnav">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b>☰ Menu</b><button class="btn sm" onclick="document.querySelector('.mnav').classList.remove('on');document.querySelector('#overlay').classList.remove('on')">✕</button></div>
-    <a href="/produtos.html">🛍️ Ver todos os produtos</a>
-    <a href="/pagina.html?p=como-funciona">❓ Como funciona</a>
-    <a href="/pagina.html?p=gabaritos">📐 Gabaritos</a>
-    <a href="/pagina.html?p=contato">💬 Fale conosco</a>
-  </div>`;
+`;
   updateCartBadge();
 }
 function renderFooter() {
@@ -176,7 +169,7 @@ function ensureCartDrawer() {
   renderMiniCart();
 }
 function openCart() { ensureCartDrawer(); $('#cart-drawer').classList.add('on'); $('#overlay').classList.add('on'); renderMiniCart(); }
-function closeCart() { $('#cart-drawer')?.classList.remove('on'); $('#overlay')?.classList.remove('on'); document.querySelector('.mnav')?.classList.remove('on'); }
+function closeCart() { $('#cart-drawer')?.classList.remove('on'); $('#overlay')?.classList.remove('on'); }
 
 function productCard(p) {
   const fav = (Auth.user?.favorites || []).includes(p.id) ? '❤️' : '🤍';
