@@ -26,6 +26,7 @@ function renderSide(active, badges = {}) {
       <a href="#/pagamentos" class="${active === 'pagamentos' ? 'on' : ''}">💳 Pagamentos</a>
       <a href="#/banners" class="${active === 'banners' ? 'on' : ''}">🖼️ Banners</a>
       <a href="#/relatorios" class="${active === 'relatorios' ? 'on' : ''}">📈 Relatórios</a>
+      <a href="#/bi" class="${active === 'bi' ? 'on' : ''}">📊 BI Gerencial</a>
       <a href="#/mensagens" class="${active === 'mensagens' ? 'on' : ''}">✉️ Mensagens ${badges.msg ? `<span class="n">${badges.msg}</span>` : ''}</a>
       <a href="#/config" class="${active === 'config' ? 'on' : ''}">⚙️ Configurações</a>
       <a href="#" onclick="event.preventDefault();Auth.logout()">🚪 Sair</a>
@@ -51,6 +52,7 @@ async function route() {
     if (path === 'pagamentos') return viewPayments();
     if (path === 'banners') return viewBanners();
     if (path === 'relatorios') return viewReports();
+    if (path === 'bi') return viewBI();
     if (path === 'mensagens') return viewMessages();
     if (path === 'config') return viewConfig();
     return viewDashboard();
@@ -326,7 +328,7 @@ async function viewBanners() {
       <div style="margin-left:auto;display:flex;gap:8px"><button class="btn ghost" onclick="addBanner()">＋ Novo</button><button class="btn" onclick="saveBanners()">💾 Salvar tudo</button></div></div>
     <div style="display:flex;flex-direction:column;gap:14px">${BANNERS.map((b, i) => `
       <div class="panel" style="margin:0;${b.active === false ? 'opacity:.6' : ''}">
-        <div style="display:grid;grid-template-columns:120px 1fr;gap:14px">
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:14px" class="banedit">
           <div style="border-radius:12px;min-height:120px;background:linear-gradient(135deg,${b.grad[0]},${b.grad[1]});display:grid;place-items:center;font-size:44px;overflow:hidden">${b.img ? `<img src="${b.img}" style="width:100%;height:100%;object-fit:cover">` : esc(b.icon || '')}</div>
           <div>
             <div class="row2"><div><label class="lbl">Título</label><input class="inp" value="${esc(b.title)}" oninput="bannerSet(${i},'title',this.value)"></div>
@@ -414,6 +416,61 @@ function exportCSV() {
   const blob = new Blob([rows.map(r => r.map(c => `"${c}"`).join(';')).join('\n')], { type: 'text/csv' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'pedidos.csv'; a.click();
   toast('CSV exportado! 📥', 'ok');
+}
+
+/* ---------- BI Gerencial ---------- */
+let BI_DAYS = 30;
+async function viewBI() {
+  if (!PRODUCTS.length) { try { PRODUCTS = await api('/api/products'); } catch { } }
+  const cutoff = BI_DAYS ? Date.now() - BI_DAYS * 864e5 : 0;
+  const valid = ORDERS.filter(o => o.status !== 'cancelado' && (!cutoff || new Date(o.createdAt).getTime() >= cutoff));
+  const rev = valid.reduce((s, o) => s + o.total, 0);
+  const open = ORDERS.filter(o => !['entregue', 'cancelado'].includes(o.status));
+  const sent = ORDERS.filter(o => (o.timeline || []).some(t => t.status === 'enviado'));
+  const avgShip = sent.length ? sent.reduce((s, o) => { const ev = o.timeline.find(t => t.status === 'enviado'); return s + (new Date(ev.at) - new Date(o.createdAt)) / 864e5; }, 0) / sent.length : 0;
+  const allRev = []; PRODUCTS.forEach(p => (p.reviews || []).forEach(r => allRev.push(r.stars)));
+  const sat = allRev.length ? allRev.reduce((a, b) => a + b, 0) / allRev.length : 0;
+  const funnel = [...FLOW, 'cancelado'].map(st => { const l = ORDERS.filter(o => o.status === st); return { st, n: l.length, v: l.reduce((s, o) => s + o.total, 0) }; });
+  const fmax = Math.max(...funnel.map(f => f.n), 1);
+  const dAgo = d => Date.now() - d * 864e5;
+  const artStuck = ORDERS.filter(o => o.status === 'aguardando_arte' && new Date(o.createdAt).getTime() < dAgo(3));
+  const noTrack = ORDERS.filter(o => o.status === 'enviado' && !o.tracking);
+  const payPend = ORDERS.filter(o => o.payment?.status !== 'paid' && o.status !== 'cancelado');
+  const payPendV = payPend.reduce((s, o) => s + o.total, 0);
+  const rejArt = ORDERS.filter(o => o.art?.status === 'rejected');
+  const days = [];
+  for (let i = 13; i >= 0; i--) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i); days.push({ t: d.getTime(), label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), v: 0 }); }
+  ORDERS.filter(o => o.status !== 'cancelado').forEach(o => { const t = new Date(o.createdAt); t.setHours(0, 0, 0, 0); const dd = days.find(x => x.t === t.getTime()); if (dd) dd.v += o.total; });
+  const dmax = Math.max(...days.map(d => d.v), 1);
+  const cmap = {};
+  valid.forEach(o => { const k = o.customer?.name || '—'; const c = cmap[k] = cmap[k] || { name: k, n: 0, v: 0 }; c.n++; c.v += o.total; });
+  const topCli = Object.values(cmap).sort((a, b) => b.v - a.v).slice(0, 5);
+  const alertRow = (icon, txt, list) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);flex-wrap:wrap"><span>${icon} ${txt}</span><b>${list.length ? list.map(o => o.code).slice(0, 4).join(', ') + (list.length > 4 ? ` +${list.length - 4}` : '') : '<span style="color:var(--ok)">tudo certo ✅</span>'}</b></div>`;
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>📊 BI Gerencial</h1><p>Como estão os processos • período: ${[7, 30, 90].map(d => `<button class="btn sm ${BI_DAYS === d ? 'navy' : 'ghost'}" onclick="BI_DAYS=${d};viewBI()">${d}d</button>`).join(' ')} <button class="btn sm ${!BI_DAYS ? 'navy' : 'ghost'}" onclick="BI_DAYS=0;viewBI()">tudo</button></p></div></div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px">
+      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">💰</div><div class="small mut">Faturamento</div><h2 style="margin:4px 0">${BRL(Math.round(rev * 100) / 100)}</h2><small class="mut">${valid.length} pedidos</small></div>
+      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">🏭</div><div class="small mut">Pedidos ativos</div><h2 style="margin:4px 0">${open.length}</h2><small class="mut">em andamento</small></div>
+      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">🧾</div><div class="small mut">Ticket médio</div><h2 style="margin:4px 0">${valid.length ? BRL(rev / valid.length) : '—'}</h2></div>
+      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">🚚</div><div class="small mut">Tempo até envio</div><h2 style="margin:4px 0">${sent.length ? avgShip.toFixed(1) + ' dias' : '—'}</h2></div>
+      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">⭐</div><div class="small mut">Satisfação</div><h2 style="margin:4px 0">${allRev.length ? sat.toFixed(1) : '—'}</h2><small class="mut">${allRev.length} avaliações</small></div>
+      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">💳</div><div class="small mut">A receber</div><h2 style="margin:4px 0">${BRL(Math.round(payPendV * 100) / 100)}</h2><small class="mut">${payPend.length} pedido(s)</small></div>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h3>🔄 Funil de processos</h3>
+        ${funnel.map(f => `<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${stTag(f.st)}</span><b>${f.n} • ${BRL(Math.round(f.v * 100) / 100)}</b></div><div style="height:8px;background:var(--bg);border-radius:99px;margin-top:3px"><div style="height:100%;width:${Math.round(f.n / fmax * 100)}%;background:${f.st === 'cancelado' ? 'var(--danger)' : 'linear-gradient(90deg,var(--primary),var(--navy))'};border-radius:99px"></div></div></div>`).join('')}
+      </div>
+      <div class="panel"><h3>🚨 Alertas de gestão</h3>
+        ${alertRow('🎨', `Aguard. arte há +3 dias (${artStuck.length})`, artStuck)}
+        ${alertRow('📦', `Enviado sem rastreio (${noTrack.length})`, noTrack)}
+        ${alertRow('💳', `Pagamento pendente (${payPend.length})`, payPend)}
+        ${alertRow('❌', `Arte reprovada (${rejArt.length})`, rejArt)}
+      </div>
+    </div>
+    <div class="grid2" style="margin-top:16px">
+      <div class="panel"><h3>📈 Receita — 14 dias</h3><div style="display:flex;align-items:flex-end;gap:4px;height:130px">${days.map(d => `<div style="flex:1;text-align:center" title="${d.label}: ${BRL(Math.round(d.v * 100) / 100)}"><div style="height:${Math.max(3, Math.round(d.v / dmax * 95))}px;background:linear-gradient(180deg,var(--primary),var(--navy));border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--mut)">${d.label.slice(0, 5)}</div></div>`).join('')}</div></div>
+      <div class="panel"><h3>👑 Top clientes</h3>${topCli.length ? `<table class="tbl"><tr><th>Cliente</th><th>Pedidos</th><th>Total</th></tr>${topCli.map(t => `<tr><td><b>${esc(t.name)}</b></td><td>${t.n}</td><td><b>${BRL(Math.round(t.v * 100) / 100)}</b></td></tr>`).join('')}</table>` : '<p class="mut">—</p>'}</div>
+    </div>`;
 }
 
 /* ---------- MENSAGENS ---------- */

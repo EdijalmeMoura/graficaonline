@@ -100,7 +100,7 @@ nav.cats a.hl{color:var(--accent);opacity:1}
 .benefit b{display:block;font-size:14px;font-family:var(--disp)}.benefit span{font-size:12.5px;color:var(--mut)}
 /* ---------- Seções ---------- */
 section.block{margin:38px 0}
-.sec-hd{display:flex;align-items:end;justify-content:space-between;margin-bottom:18px;gap:12px}
+.sec-hd{display:flex;align-items:end;justify-content:space-between;margin-bottom:18px;gap:12px;flex-wrap:wrap}
 .sec-hd .kick{display:inline-block;font-size:11.5px;font-weight:800;letter-spacing:2px;color:var(--primary);text-transform:uppercase;margin-bottom:4px}
 .sec-hd h2{font-size:25px;margin:0;letter-spacing:-.5px}
 .sec-hd p{margin:2px 0 0;color:var(--mut);font-size:14px}
@@ -227,7 +227,7 @@ footer.site{background:linear-gradient(180deg,#0A1633,#060D22);color:#CBD5E1;mar
 .pill:hover{border-color:var(--navy);transform:translateY(-1px)} .pill.on{border-color:var(--primary);background:linear-gradient(135deg,#FFF3EC,#FFE8D8);color:var(--primary-d);box-shadow:0 4px 12px rgba(255,77,0,.18)}
 .price-box{background:linear-gradient(140deg,var(--navy),var(--navy3));color:#fff;border-radius:16px;padding:20px;margin:18px 0;position:relative;overflow:hidden}
 .price-box::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;background:radial-gradient(circle,rgba(255,77,0,.5),transparent 70%)}
-.price-box .v{display:flex;align-items:end;justify-content:space-between;position:relative}
+.price-box .v{display:flex;align-items:end;justify-content:space-between;position:relative;flex-wrap:wrap;gap:10px}
 .price-box .v b{font-size:34px;font-family:var(--disp)} .price-box .v span{opacity:.75;font-size:13px}
 .price-box .pix{background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:9px 13px;font-size:13px;margin-top:12px;position:relative}
 /* Carrinho / checkout */
@@ -287,3 +287,21 @@ footer.site{background:linear-gradient(180deg,#0A1633,#060D22);color:#CBD5E1;mar
 .pill:disabled{cursor:default;opacity:.9}
 .qty-pills .pill{line-height:1.4;text-align:center}
 @media(max-width:1000px){.pd{padding-bottom:80px}}
+
+/* ---------- Responsivo 2.0 ---------- */
+.mono{overflow-wrap:anywhere}
+.paybar .wrap{display:flex;gap:16px;flex-wrap:wrap}
+@media(max-width:640px){
+  .mini{flex-wrap:wrap}
+  .citem{flex-wrap:wrap}
+  .citem .pr{margin-left:auto;text-align:right}
+  .citem .t{width:64px;height:64px;font-size:32px}
+  .stepsck{flex-wrap:wrap;font-size:13px}
+  table.tbl{font-size:12.5px}
+  .banedit{grid-template-columns:1fr !important}
+  .modal{padding:10px}
+  .main-hd h1{font-size:22px}
+  .hd-actions{gap:0}
+  #toasts{left:12px;right:12px;bottom:12px}
+  #toasts .toast{width:100%}
+}
