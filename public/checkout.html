@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=8"></head>
+<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=9"></head>
 <body data-page="checkout">
 <div id="site-header"></div>
 <div class="wrap">
@@ -9,7 +9,7 @@
   <div class="stepsck"><div class="on">1 • Entrega</div><div class="on">2 • Pagamento</div><div>3 • Confirmação</div></div>
   <div class="cartlay">
     <div>
-      <div class="card"><h3>📍 Endereço de entrega</h3><div id="ck-addr"></div>
+      <div class="card" id="ck-addr-card"><h3>📍 Endereço de entrega</h3><div id="ck-addr"></div>
         <details style="margin-top:10px"><summary class="link-more" style="cursor:pointer">＋ Novo endereço</summary>
           <form onsubmit="ckAddAddress(event)" style="margin-top:10px">
             <div class="row2"><div><label class="lbl">Rótulo</label><input class="inp" name="label" placeholder="Casa, Loja..." required></div>
@@ -21,7 +21,9 @@
             <button class="btn sm" style="margin-top:10px">Salvar endereço</button></form></details></div>
       <div class="card"><h3>🚚 Frete</h3>
         <div class="pills"><button class="pill on" onclick="ckSetShip('PAC');$$('.card .pills .pill').forEach((b,i)=>b.classList.toggle('on',i===0))">PAC (5-8 dias)</button>
-        <button class="pill" onclick="ckSetShip('SEDEX');$$('.card .pills .pill').forEach((b,i)=>b.classList.toggle('on',i===1))">SEDEX (2-4 dias)</button></div></div>
+        <button class="pill" onclick="ckSetShip('SEDEX');$$('.card .pills .pill').forEach((b,i)=>b.classList.toggle('on',i===1))">SEDEX (2-4 dias)</button>
+        <button class="pill" onclick="ckSetShip('Retirada');$$('.card .pills .pill').forEach((b,i)=>b.classList.toggle('on',i===2))">🏪 Retirada na loja</button></div>
+        <div id="ck-pickup" style="display:none;margin-top:10px;background:#F0FDF4;border:1.5px solid #16A34A;border-radius:10px;padding:12px">🏪 <b>Retirada na loja — GRÁTIS</b><br><span class="small">Sem frete e sem endereço de entrega. Avisamos quando seu pedido estiver pronto! 🎉</span></div></div>
       <div class="card"><h3>💳 Pagamento</h3>
         <div class="paym"><button data-pay="pix" class="on" onclick="ckSetPay('pix')">⚡ Pix<small>5% OFF à vista</small></button>
         <button data-pay="card" onclick="ckSetPay('card')">💳 Cartão<small>em até 6x sem juros</small></button>
@@ -38,5 +40,5 @@
   </div>
 </div>
 <div id="site-footer"></div>
-<script src="/js/app.js?v=8"></script><script src="/js/shop.js?v=8"></script>
+<script src="/js/app.js?v=9"></script><script src="/js/shop.js?v=9"></script>
 </body></html>

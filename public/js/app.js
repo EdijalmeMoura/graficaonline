@@ -111,9 +111,8 @@ function renderHeader() {
     <a class="hl" href="/pagina.html?p=gabaritos">📐 Gabaritos</a>
   </div></nav>
   <div class="mnav">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b>📂 Categorias</b><button class="btn sm" onclick="document.querySelector('.mnav').classList.remove('on');document.querySelector('#overlay').classList.remove('on')">✕</button></div>
-    <a href="/produtos.html">Todos os produtos</a>
-    ${CATS.map(c => `<a href="/produtos.html?cat=${c.id}">${c.icon} ${esc(c.name)}</a>`).join('')}
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px"><b>☰ Menu</b><button class="btn sm" onclick="document.querySelector('.mnav').classList.remove('on');document.querySelector('#overlay').classList.remove('on')">✕</button></div>
+    <a href="/produtos.html">🛍️ Ver todos os produtos</a>
     <a href="/pagina.html?p=como-funciona">❓ Como funciona</a>
     <a href="/pagina.html?p=gabaritos">📐 Gabaritos</a>
     <a href="/pagina.html?p=contato">💬 Fale conosco</a>

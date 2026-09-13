@@ -125,7 +125,7 @@ async function pageProduct() {
     <div class="price-box"><div class="v"><div><span>Total</span><br><b id="pd-total">…</b><br><span id="pd-unit"></span></div><div style="text-align:right"><span>📦 Frete</span><br><b id="pd-ship" style="font-size:18px">…</b></div></div>
       <div class="pix">⚡ <b>${CONFIG.pixDiscount || 5}% OFF no Pix</b> → <b id="pd-pix"></b></div></div>
     <div class="row2"><div><label class="lbl">📮 CEP de entrega</label><input class="inp" id="pd-cep" placeholder="00000-000" maxlength="9"></div>
-    <div><label class="lbl">🚚 Opção</label><select class="inp" id="pd-shiptype"><option value="PAC">PAC — ${BRL(CONFIG.shipPAC ?? 19.9)}</option><option value="SEDEX">SEDEX — ${BRL(CONFIG.shipSEDEX ?? 29.9)}</option></select></div></div>
+    <div><label class="lbl">🚚 Opção</label><select class="inp" id="pd-shiptype"><option value="PAC">PAC — ${BRL(CONFIG.shipPAC ?? 19.9)}</option><option value="SEDEX">SEDEX — ${BRL(CONFIG.shipSEDEX ?? 29.9)}</option><option value="Retirada">🏪 Retirada na loja — GRÁTIS</option></select></div></div>
     <div style="display:flex;gap:8px;margin-top:14px"><button class="btn big block" onclick="pdAdd(true)">🛒 Adicionar ao carrinho</button></div>
     <div style="display:flex;gap:8px;margin-top:8px"><button class="btn navy block" onclick="pdAdd(false)">⚡ Comprar agora</button></div>
     <p class="small mut" style="margin-top:10px">🔒 Compra segura • Você envia a arte no checkout ou depois, na sua conta.</p>`;
@@ -169,7 +169,7 @@ function pdNumbers() {
   $('#pd-total').textContent = BRL(PD_CALC.total);
   $('#pd-unit').textContent = `${BRL(PD_CALC.unit)} por unidade • ${PD_CALC.qty.toLocaleString('pt-BR')} un`;
   $('#pd-pix').textContent = BRL(PD_CALC.total * (1 - (CONFIG.pixDiscount || 5) / 100));
-  const ship = PD_CALC.total >= (CONFIG.freeShipFrom || 299) ? 0 : ($('#pd-shiptype')?.value === 'SEDEX' ? CONFIG.shipSEDEX : CONFIG.shipPAC);
+  const ship = ($('#pd-shiptype')?.value === 'Retirada' || PD_CALC.total >= (CONFIG.freeShipFrom || 299)) ? 0 : ($('#pd-shiptype')?.value === 'SEDEX' ? CONFIG.shipSEDEX : CONFIG.shipPAC);
   $('#pd-ship').textContent = ship === 0 ? 'GRÁTIS 🎉' : BRL(ship);
 }
 function pdLabel() {
@@ -243,7 +243,13 @@ async function ckApplyCoupon() {
     CK.coupon = c; toast(`Cupom ${c.code} aplicado! 🎟️`, 'ok'); ckTotals();
   } catch (e) { toast(e.message, 'err'); }
 }
-function ckSetShip(v) { CK.shipType = v; ckTotals(); }
+function ckSetShip(v) {
+  CK.shipType = v;
+  const pk = v === 'Retirada';
+  const ac = document.querySelector('#ck-addr-card'); if (ac) ac.style.display = pk ? 'none' : '';
+  const pi = document.querySelector('#ck-pickup'); if (pi) pi.style.display = pk ? '' : 'none';
+  ckTotals();
+}
 function ckSetPay(v) { CK.pay = v; $$('.paym button').forEach(b => b.classList.toggle('on', b.dataset.pay === v)); ckTotals(); }
 async function ckArt(input) {
   const f = input.files[0]; if (!f) return;
@@ -254,7 +260,7 @@ async function ckArt(input) {
 function ckTotals() {
   const sub = Cart.subtotal();
   let desc = CK.coupon?.discount || 0, free = !!CK.coupon?.freeship;
-  let ship = CK.shipType === 'SEDEX' ? (CONFIG.shipSEDEX ?? 29.9) : (CONFIG.shipPAC ?? 19.9);
+  let ship = CK.shipType === 'Retirada' ? 0 : CK.shipType === 'SEDEX' ? (CONFIG.shipSEDEX ?? 29.9) : (CONFIG.shipPAC ?? 19.9);
   if (free || (sub - desc) >= (CONFIG.freeShipFrom || 299)) ship = 0;
   let pixOff = 0;
   if (CK.pay === 'pix') pixOff = Math.round((sub - desc) * (CONFIG.pixDiscount || 5)) / 100;
@@ -268,8 +274,9 @@ function ckTotals() {
     ${CK.pay === 'card' ? `<small class="mut">em até ${CONFIG.installmentMax || 6}x de ${BRL(total / (CONFIG.installmentMax || 6))} sem juros</small>` : ''}</div>`;
 }
 async function ckFinish() {
-  if (!CK.addressId) { toast('Cadastre/selecione o endereço de entrega', 'err'); return; }
-  const addr = window._addrs.find(a => a.id === CK.addressId);
+  const pickup = CK.shipType === 'Retirada';
+  if (!pickup && !CK.addressId) { toast('Cadastre/selecione o endereço de entrega', 'err'); return; }
+  const addr = pickup ? { label: 'Retirada na loja', street: 'Retirada na loja', district: '', city: '', state: '', zip: '' } : window._addrs.find(a => a.id === CK.addressId);
   const btn = $('#ck-btn'); btn.disabled = true; btn.textContent = 'Processando pagamento... ⏳';
   try {
     const order = await api('/api/orders', {
@@ -338,7 +345,7 @@ function pageDoc() {
     'criacao-e-envio': `<h1>Criação e envio de arquivos 🎨</h1><h2>Formatos aceitos</h2><p>PDF, JPG, PNG, AI, PSD, CDR, TIFF e EPS — até 60MB por arquivo.</p><h2>Não tem arte?</h2><p>Nosso estúdio cria sua arte a partir de <b>R$ 49</b>. Chame no WhatsApp <b>${esc(CONFIG.phone || '')}</b> 💬</p><h2>Checklist antes de enviar</h2><ul><li>✅ CMYK + 300 DPI</li><li>✅ Textos em curvas</li><li>✅ Sangria de 3mm</li><li>✅ Confira telefone, endereço e preços!</li></ul>`,
     'duvidas': `<h1>Dúvidas frequentes ❓</h1><div class="faq"><details open><summary>Qual o prazo de entrega?</summary><div class="a">Produção de até 5 dias úteis (normal) ou 2 dias (expressa) + prazo do frete escolhido no checkout.</div></details><details><summary>Posso enviar a arte depois?</summary><div class="a">Sim! Você envia no checkout ou quando quiser, na área “Meus pedidos”.</div></details><details><summary>Vocês conferem minha arte?</summary><div class="a">Sim, toda arte passa por análise gratuita. Se algo estiver errado, avisamos antes de imprimir.</div></details><details><summary>Quais as formas de pagamento?</summary><div class="a">Pix (com ${CONFIG.pixDiscount || 5}% OFF), cartão em até ${CONFIG.installmentMax || 6}x e boleto.</div></details><details><summary>E se chegar com defeito?</summary><div class="a">Reimprimimos ou devolvemos seu dinheiro. Simples assim. 🛡️</div></details></div>`,
     'contato': `<h1>Fale conosco 💬</h1><p>📞 <b>${esc(CONFIG.phone || '')}</b> • ✉️ <b>${esc(CONFIG.email || '')}</b><br>🕘 ${esc(CONFIG.hours || '')}</p><form onsubmit="sendContact(event)"><div class="row2"><div><label class="lbl">Nome</label><input class="inp" name="name" required></div><div><label class="lbl">E-mail</label><input class="inp" name="email" type="email" required></div></div><div style="margin-top:10px"><label class="lbl">Assunto</label><input class="inp" name="subject"></div><div style="margin-top:10px"><label class="lbl">Mensagem</label><textarea class="inp" name="message" rows="5" required></textarea></div><button class="btn" style="margin-top:12px">Enviar mensagem ✉️</button></form>`,
-    'politicas': `<h1>Nossas políticas 📜</h1><h2>Privacidade (LGPD)</h2><p>Seus dados são usados apenas para processar pedidos e melhorar sua experiência. Nunca vendemos informações. Você pode pedir exclusão quando quiser.</p><h2>Qualidade</h2><p>Todo pedido passa por prova digital e controle de qualidade. Defeito de impressão = reimpressão ou reembolso.</p><h2>Entrega</h2><p>Enviamos via PAC/SEDEX para todo o Brasil. Frete grátis em compras acima de <b>${BRL(CONFIG.freeShipFrom || 299)}</b>. Atrasos da transportadora geram acompanhamento dedicado.</p><h2>Trocas e devoluções</h2><p>Produtos personalizados seguem arte aprovada. Erro nosso? Reimpressão imediata. Erro na arte enviada pelo cliente? Reimprimimos com 30% de desconto. 🤝</p>`,
+    'politicas': `<h1>Nossas políticas 📜</h1><h2>Privacidade (LGPD)</h2><p>Seus dados são usados apenas para processar pedidos e melhorar sua experiência. Nunca vendemos informações. Você pode pedir exclusão quando quiser.</p><h2>Qualidade</h2><p>Todo pedido passa por prova digital e controle de qualidade. Defeito de impressão = reimpressão ou reembolso.</p><h2>Entrega</h2><p>Enviamos via PAC/SEDEX para todo o Brasil ou retire grátis na loja. Frete grátis em compras acima de <b>${BRL(CONFIG.freeShipFrom || 299)}</b>. Atrasos da transportadora geram acompanhamento dedicado.</p><h2>Trocas e devoluções</h2><p>Produtos personalizados seguem arte aprovada. Erro nosso? Reimpressão imediata. Erro na arte enviada pelo cliente? Reimprimimos com 30% de desconto. 🤝</p>`,
   };
   $('#doc').innerHTML = T[p] || T['quem-somos'];
   if (p === 'gabaritos') api('/api/products').then(list => {

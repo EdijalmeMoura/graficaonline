@@ -621,7 +621,8 @@ app.get('/api/orders/:id', auth, (req, res) => {
 });
 app.post('/api/orders', auth, (req, res) => {
   const db = loadDB();
-  const { items = [], address, shippingType = 'PAC', paymentMethod = 'pix', coupon = null, art = null } = req.body;
+  let { items = [], address, shippingType = 'PAC', paymentMethod = 'pix', coupon = null, art = null } = req.body;
+  if (shippingType === 'Retirada' && (!address || !address.street)) address = { label: 'Retirada na loja', street: 'Retirada na loja', district: '', city: '', state: '', zip: '' };
   if (!items.length) return res.status(400).json({ error: 'Carrinho vazio' });
   if (!address || !address.street) return res.status(400).json({ error: 'Informe o endereço de entrega' });
   // Recalcula preços no servidor (segurança)
@@ -648,7 +649,7 @@ app.post('/api/orders', auth, (req, res) => {
       if (c.type === 'freeship') freeship = true;
     }
   }
-  let shipping = shippingType === 'SEDEX' ? db.config.shipSEDEX : db.config.shipPAC;
+  let shipping = shippingType === 'Retirada' ? 0 : shippingType === 'SEDEX' ? db.config.shipSEDEX : db.config.shipPAC;
   if (freeship || (subtotal - discount) >= db.config.freeShipFrom) shipping = 0;
   if (paymentMethod === 'pix') discount += Math.round((subtotal - discount) * db.config.pixDiscount) / 100;
   discount = Math.round(discount * 100) / 100;

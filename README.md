@@ -17,7 +17,7 @@ Logins de demonstração (criados no seed):
 | Perfil  | E-mail                   | Senha    |
 |---------|--------------------------|----------|
 | Admin   | admin@primeprint.com.br  | admin123 |
-| Cliente | demo@primeprint.com.br   | demo123  |
+| Cliente | cliente@demo.com         | demo123  |
 
 ## ☁️ Publicar com link permanente (Render — grátis)
 
