@@ -433,7 +433,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '',
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '',
   };
 
   return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, messages: [], config };
@@ -480,7 +480,7 @@ function calcPrice(product, sel = {}) {
    ROTAS — PÚBLICO
    ============================================================ */
 app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-app.get('/api/config', (req, res) => { const { mpToken, stoneToken, infpayToken, ...pub } = loadDB().config; res.json(pub); });
+app.get('/api/config', (req, res) => { const { mpToken, stoneToken, infpayToken, meToken, ...pub } = loadDB().config; res.json(pub); });
 app.get('/api/categories', (req, res) => {
   const db = loadDB();
   const withCount = db.categories.map(c => ({ ...c, count: db.products.filter(p => p.category === c.id && p.active !== false).length }));
@@ -619,9 +619,41 @@ app.get('/api/orders/:id', auth, (req, res) => {
   if (req.user.role !== 'admin' && o.userId !== req.user.id) return res.status(403).json({ error: 'Sem acesso' });
   res.json(o);
 });
-app.post('/api/orders', auth, (req, res) => {
+/* Frete real via Melhor Envio (com fallback p/ tabela manual) */
+const meBRL = n => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
+async function meQuote(toZip, subtotal) {
+  const c = loadDB().config;
+  const manual = () => ([
+    { id: 'PAC', label: `PAC — ${meBRL(c.shipPAC)}`, price: Number(c.shipPAC), eta: '5-8 dias' },
+    { id: 'SEDEX', label: `SEDEX — ${meBRL(c.shipSEDEX)}`, price: Number(c.shipSEDEX), eta: '2-4 dias' },
+  ]);
+  const from = String(c.shipOriginZip || '').replace(/\D/g, '');
+  const tk = c.meToken || process.env.ME_TOKEN || '';
+  if (!c.meEnabled || !tk || from.length !== 8 || String(toZip || '').length !== 8) return { live: false, options: manual() };
+  try {
+    const r = await fetch('https://www.melhorenvio.com.br/api/v2/me/shipment/calculate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + tk },
+      body: JSON.stringify({ from: { postal_code: from }, to: { postal_code: String(toZip) }, products: [{ id: 'pedido', width: Number(c.pkgWidth) || 20, height: Number(c.pkgHeight) || 10, length: Number(c.pkgLength) || 30, weight: Number(c.pkgWeight) || 1, insurance_value: Number(subtotal) || 0, quantity: 1 }] }),
+    });
+    const data = await r.json();
+    if (!r.ok || !Array.isArray(data)) throw 0;
+    const live = data.filter(s => s && !s.error && Number(s.price) > 0).slice(0, 6).map(s => ({ id: String(s.id), label: `${s.company?.name || 'Correios'} ${s.name || ''} — ${meBRL(s.price)}`.trim(), price: Number(s.price), eta: s.delivery_time ? s.delivery_time + ' dias' : '' }));
+    return live.length ? { live: true, options: live } : { live: false, options: manual() };
+  } catch { return { live: false, options: manual() }; }
+}
+app.post('/api/shipping/quote', async (req, res) => {
+  const q = await meQuote(String(req.body.toZip || '').replace(/\D/g, ''), Number(req.body.subtotal) || 0);
+  q.options.push({ id: 'Retirada', label: 'Retirada na loja — GRÁTIS', price: 0, eta: '' });
+  res.json(q);
+});
+app.get('/api/admin/shipping', auth, admin, (req, res) => {
+  const c = loadDB().config;
+  res.json({ meActive: !!(c.meEnabled && (c.meToken || process.env.ME_TOKEN)), hasToken: !!(c.meToken || process.env.ME_TOKEN) });
+});
+app.post('/api/orders', auth, async (req, res) => {
   const db = loadDB();
-  let { items = [], address, shippingType = 'PAC', paymentMethod = 'pix', coupon = null, art = null } = req.body;
+  let { items = [], address, shippingType = 'PAC', shippingLabel = null, paymentMethod = 'pix', coupon = null, art = null } = req.body;
   if (shippingType === 'Retirada' && (!address || !address.street)) address = { label: 'Retirada na loja', street: 'Retirada na loja', district: '', city: '', state: '', zip: '' };
   if (!items.length) return res.status(400).json({ error: 'Carrinho vazio' });
   if (!address || !address.street) return res.status(400).json({ error: 'Informe o endereço de entrega' });
@@ -649,7 +681,15 @@ app.post('/api/orders', auth, (req, res) => {
       if (c.type === 'freeship') freeship = true;
     }
   }
-  let shipping = shippingType === 'Retirada' ? 0 : shippingType === 'SEDEX' ? db.config.shipSEDEX : db.config.shipPAC;
+  let shipping, shipLabel = shippingLabel || shippingType;
+  if (shippingType === 'Retirada') shipping = 0;
+  else if (shippingType === 'PAC' || shippingType === 'SEDEX') shipping = shippingType === 'SEDEX' ? db.config.shipSEDEX : db.config.shipPAC;
+  else {
+    const q = await meQuote((address.zip || '').replace(/\D/g, ''), subtotal);
+    const opt = q.options.find(o => String(o.id) === String(shippingType));
+    if (opt) { shipping = opt.price; shipLabel = opt.label; }
+    else shipping = db.config.shipPAC;
+  }
   if (freeship || (subtotal - discount) >= db.config.freeShipFrom) shipping = 0;
   if (paymentMethod === 'pix') discount += Math.round((subtotal - discount) * db.config.pixDiscount) / 100;
   discount = Math.round(discount * 100) / 100;
@@ -659,7 +699,7 @@ app.post('/api/orders', auth, (req, res) => {
     id: uid('o-'), code: `PP-2026-${n}`, userId: req.user.id, items: normItems,
     subtotal, discount, coupon: couponCode, shipping, total,
     payment: { method: paymentMethod, status: paymentMethod === 'boleto' ? 'pending' : 'paid' },
-    address, shippingType, status: art && art.url ? 'em_analise' : 'aguardando_arte', tracking: '',
+    address, shippingType: shipLabel, status: art && art.url ? 'em_analise' : 'aguardando_arte', tracking: '',
     art: art && art.url ? { file: art.url, originalName: art.name || '', status: 'in_review', feedback: '' } : { file: null, originalName: '', status: 'pending', feedback: '' },
     timeline: [{ status: art && art.url ? 'em_analise' : 'aguardando_arte', at: new Date().toISOString() }],
     createdAt: new Date().toISOString(),

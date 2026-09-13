@@ -130,7 +130,7 @@ async function pageProduct() {
     <div style="display:flex;gap:8px;margin-top:8px"><button class="btn navy block" onclick="pdAdd(false)">⚡ Comprar agora</button></div>
     <p class="small mut" style="margin-top:10px">🔒 Compra segura • Você envia a arte no checkout ou depois, na sua conta.</p>`;
   window.pdSet = (g, v) => { PDSEL[g] = String(v); renderCfg(); };
-  $('#pd-cep').oninput = e => { e.target.value = e.target.value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2'); };
+  $('#pd-cep').oninput = e => { const d = e.target.value.replace(/\D/g, '').slice(0, 8); e.target.value = d.replace(/(\d{5})(\d)/, '$1-$2'); if (d.length === 8) pdQuote(d); };
   $('#pd-shiptype').onchange = pdNumbers;
   renderCfg();
   loadRelated();
@@ -164,12 +164,24 @@ async function loadRelated() {
     document.querySelector('.pd').after(sec);
   } catch {}
 }
+async function pdQuote(d) {
+  const toZip = (d || document.querySelector('#pd-cep').value || '').replace(/\D/g, '');
+  if (toZip.length !== 8 || !PD_CALC) return;
+  try {
+    const q = await api('/api/shipping/quote', { method: 'POST', body: JSON.stringify({ toZip, subtotal: PD_CALC.total }) });
+    window._pdQuotes = {};
+    document.querySelector('#pd-shiptype').innerHTML = q.options.map(o => { window._pdQuotes[o.id] = o.price; return `<option value="${o.id}">${esc(o.label)}${o.eta ? ' (' + o.eta + ')' : ''}</option>`; }).join('');
+    pdNumbers();
+    if (q.live) toast('Frete atualizado! 📮', 'ok');
+  } catch { }
+}
 function pdNumbers() {
   PD_CALC = clientPrice(PDSEL);
   $('#pd-total').textContent = BRL(PD_CALC.total);
   $('#pd-unit').textContent = `${BRL(PD_CALC.unit)} por unidade • ${PD_CALC.qty.toLocaleString('pt-BR')} un`;
   $('#pd-pix').textContent = BRL(PD_CALC.total * (1 - (CONFIG.pixDiscount || 5) / 100));
-  const ship = ($('#pd-shiptype')?.value === 'Retirada' || PD_CALC.total >= (CONFIG.freeShipFrom || 299)) ? 0 : ($('#pd-shiptype')?.value === 'SEDEX' ? CONFIG.shipSEDEX : CONFIG.shipPAC);
+  const pdv = document.querySelector('#pd-shiptype')?.value;
+  const ship = (pdv === 'Retirada' || PD_CALC.total >= (CONFIG.freeShipFrom || 299)) ? 0 : (window._pdQuotes?.[pdv] ?? (pdv === 'SEDEX' ? CONFIG.shipSEDEX : CONFIG.shipPAC));
   $('#pd-ship').textContent = ship === 0 ? 'GRÁTIS 🎉' : BRL(ship);
 }
 function pdLabel() {
@@ -216,6 +228,7 @@ async function pageCheckout() {
   Auth.set({ token: Auth.token, user: me });
   renderCkAddresses(me.addresses || []);
   renderCkPay();
+  renderCkShip(); ckQuote();
   $('#ck-items').innerHTML = Cart.items.map(i => `<div class="mini"><div class="t" style="background:linear-gradient(135deg,${i.grad?.[0] || '#0B1E3B'},${i.grad?.[1] || '#1E5AA8'})">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.configLabel || '')}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('');
   ckTotals();
 }
@@ -223,7 +236,7 @@ function renderCkAddresses(addrs) {
   CK.addressId = (addrs.find(a => a.main) || addrs[0])?.id || null;
   $('#ck-addr').innerHTML = addrs.length ? addrs.map(a => `
     <label style="display:flex;gap:10px;border:1.5px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px;cursor:pointer;${a.id === CK.addressId ? 'border-color:var(--primary);background:#FFF7F2' : ''}">
-      <input type="radio" name="addr" ${a.id === CK.addressId ? 'checked' : ''} onchange="CK.addressId='${a.id}';renderCkAddresses(window._addrs)">
+      <input type="radio" name="addr" ${a.id === CK.addressId ? 'checked' : ''} onchange="CK.addressId='${a.id}';renderCkAddresses(window._addrs);ckQuote()">
       <span><b>${esc(a.label || 'Endereço')}</b><br><span class="small mut">${esc(a.street)} — ${esc(a.district || '')} • ${esc(a.city)}/${esc(a.state)} • CEP ${esc(a.zip)}</span></span>
     </label>`).join('')
     : `<p class="mut">Nenhum endereço ainda. Cadastre abaixo 👇</p>`;
@@ -255,10 +268,38 @@ function renderCkPay() {
 }
 function ckSetShip(v) {
   CK.shipType = v;
+  const opt = (CK._shipOpts || []).find(o => String(o.id) === String(v));
+  CK.shipLabel = opt ? opt.label : v;
+  document.querySelectorAll('#ck-ship-pills .pill').forEach(b => b.classList.toggle('on', b.dataset.id === String(v)));
   const pk = v === 'Retirada';
   const ac = document.querySelector('#ck-addr-card'); if (ac) ac.style.display = pk ? 'none' : '';
   const pi = document.querySelector('#ck-pickup'); if (pi) pi.style.display = pk ? '' : 'none';
   ckTotals();
+}
+function renderCkShip() {
+  const box = document.querySelector('#ck-ship-pills');
+  if (!box) return;
+  const opts = CK._shipOpts?.length ? CK._shipOpts : [
+    { id: 'PAC', label: `PAC — ${BRL(CONFIG.shipPAC ?? 19.9)}`, price: CONFIG.shipPAC ?? 19.9, eta: '5-8 dias' },
+    { id: 'SEDEX', label: `SEDEX — ${BRL(CONFIG.shipSEDEX ?? 29.9)}`, price: CONFIG.shipSEDEX ?? 29.9, eta: '2-4 dias' },
+    { id: 'Retirada', label: '🏪 Retirada na loja — GRÁTIS', price: 0, eta: '' },
+  ];
+  CK._quotes = {};
+  opts.forEach(o => CK._quotes[o.id] = o.price);
+  if (!opts.find(o => String(o.id) === String(CK.shipType))) CK.shipType = opts[0].id;
+  const cur = opts.find(o => String(o.id) === String(CK.shipType));
+  CK.shipLabel = cur ? cur.label : CK.shipType;
+  box.innerHTML = opts.map(o => `<button class="pill ${String(CK.shipType) === String(o.id) ? 'on' : ''}" data-id="${o.id}" onclick="ckSetShip('${o.id}')">${esc(o.label)}${o.eta ? ` <small>(${o.eta})</small>` : ''}</button>`).join('');
+}
+async function ckQuote() {
+  const addr = (window._addrs || []).find(a => a.id === CK.addressId);
+  const toZip = (addr?.zip || '').replace(/\D/g, '');
+  if (toZip.length !== 8) return;
+  try {
+    const q = await api('/api/shipping/quote', { method: 'POST', body: JSON.stringify({ toZip, subtotal: Cart.subtotal() }) });
+    CK._shipOpts = q.options;
+    renderCkShip(); ckTotals();
+  } catch { }
 }
 function ckSetPay(v) { CK.pay = v; $$('.paym button').forEach(b => b.classList.toggle('on', b.dataset.pay === v)); ckTotals(); }
 async function ckArt(input) {
@@ -279,7 +320,7 @@ async function ckArt(input) {
 function ckTotals() {
   const sub = Cart.subtotal();
   let desc = CK.coupon?.discount || 0, free = !!CK.coupon?.freeship;
-  let ship = CK.shipType === 'Retirada' ? 0 : CK.shipType === 'SEDEX' ? (CONFIG.shipSEDEX ?? 29.9) : (CONFIG.shipPAC ?? 19.9);
+  let ship = CK.shipType === 'Retirada' ? 0 : (CK._quotes && CK._quotes[CK.shipType] != null ? CK._quotes[CK.shipType] : (CK.shipType === 'SEDEX' ? (CONFIG.shipSEDEX ?? 29.9) : (CONFIG.shipPAC ?? 19.9)));
   if (free || (sub - desc) >= (CONFIG.freeShipFrom || 299)) ship = 0;
   let pixOff = 0;
   if (CK.pay === 'pix') pixOff = Math.round((sub - desc) * (CONFIG.pixDiscount || 5)) / 100;
@@ -288,7 +329,7 @@ function ckTotals() {
   $('#ck-totals').innerHTML = `<div class="totals">
     <div class="tt"><span>Subtotal</span><b>${BRL(sub)}</b></div>
     ${desc || pixOff ? `<div class="tt"><span>Descontos</span><b style="color:var(--ok)">−${BRL(desc + pixOff)}</b></div>` : ''}
-    <div class="tt"><span>Frete (${CK.shipType})</span>${ship === 0 ? '<span class="free">GRÁTIS 🎉</span>' : `<b>${BRL(ship)}</b>`}</div>
+    <div class="tt"><span>Frete (${esc(CK.shipLabel || CK.shipType)})</span>${ship === 0 ? '<span class="free">GRÁTIS 🎉</span>' : `<b>${BRL(ship)}</b>`}</div>
     <div class="tt gt"><span>Total</span><span>${BRL(total)}</span></div>
     ${CK.pay === 'card' ? `<small class="mut">em até ${CONFIG.installmentMax || 6}x de ${BRL(total / (CONFIG.installmentMax || 6))} sem juros</small>` : ''}</div>`;
 }
@@ -302,7 +343,7 @@ async function ckFinish() {
       method: 'POST',
       body: JSON.stringify({
         items: Cart.items.map(i => ({ productId: i.productId, sel: i.sel, configLabel: i.configLabel })),
-        address: addr, shippingType: CK.shipType, paymentMethod: CK.pay,
+        address: addr, shippingType: CK.shipType, shippingLabel: CK.shipLabel || CK.shipType, paymentMethod: CK.pay,
         coupon: CK.coupon?.code || null, art: CK.art ? { url: CK.art.url, name: CK.art.name } : null,
       })
     });

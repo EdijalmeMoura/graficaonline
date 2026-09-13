@@ -438,8 +438,10 @@ async function savePayments(e) {
   toast('Pagamentos salvos! 💳', 'ok'); viewPayments();
 }
 
-function viewConfig() {
+async function viewConfig() {
   const c = CONFIG;
+  let me = { meActive: false, hasToken: false };
+  try { me = await api('/api/admin/shipping'); } catch { }
   $('#view').innerHTML = `<div class="main-hd"><div><h1>⚙️ Configurações</h1><p>Dados da loja e frete • pagamento em <a class="link-more" href="#/pagamentos">💳 Pagamentos</a></p></div></div>
   <div class="panel"><form onsubmit="saveConfig(event)" style="max-width:640px">
     <div class="row2"><div><label class="lbl">Nome da loja</label><input class="inp" name="storeName" value="${esc(c.storeName)}"></div><div><label class="lbl">Telefone</label><input class="inp" name="phone" value="${esc(c.phone)}"></div></div>
@@ -448,10 +450,17 @@ function viewConfig() {
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Frete PAC (R$)</label><input class="inp" name="shipPAC" type="number" step="0.01" value="${c.shipPAC}"></div><div><label class="lbl">Frete SEDEX (R$)</label><input class="inp" name="shipSEDEX" type="number" step="0.01" value="${c.shipSEDEX}"></div></div>
     <div style="margin-top:8px;max-width:300px"><label class="lbl">Frete grátis acima de (R$)</label><input class="inp" name="freeShipFrom" type="number" step="0.01" value="${c.freeShipFrom}"></div>
     
+    <h3 style="margin-top:16px">📮 Frete real (Melhor Envio)</h3>
+    <p class="small mut">Status: ${me.meActive ? '<b style="color:var(--ok)">cotação ao vivo ✅</b>' : '<b>tabela manual</b>'} • <a class="link-more" href="https://www.melhorenvio.com.br" target="_blank">criar conta grátis →</a></p>
+    <div class="row2"><div><label class="lbl">CEP de origem</label><input class="inp" name="shipOriginZip" value="${esc(c.shipOriginZip || '')}" placeholder="00000-000"></div><div><label class="lbl">Peso padrão (kg)</label><input class="inp" name="pkgWeight" type="number" step="0.1" value="${c.pkgWeight ?? 1}"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Largura (cm)</label><input class="inp" name="pkgWidth" type="number" value="${c.pkgWidth ?? 20}"></div><div><label class="lbl">Altura (cm)</label><input class="inp" name="pkgHeight" type="number" value="${c.pkgHeight ?? 10}"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Comprimento (cm)</label><input class="inp" name="pkgLength" type="number" value="${c.pkgLength ?? 30}"></div><div><label class="lbl">Token Melhor Envio</label><input class="inp mono" name="meToken" type="password" value="" placeholder="${me.hasToken ? '•••••• salvo (digite para trocar)' : 'Cole o token'}"></div></div>
+    <div style="margin-top:8px"><label style="font-weight:700"><input type="checkbox" name="meEnabled" ${c.meEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar cotação ao vivo</label></div>
     <button class="btn" style="margin-top:12px">Salvar configurações ✅</button></form></div>`;
 }
 async function saveConfig(e) {
   e.preventDefault(); const f = e.target;
-  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value) }) });
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked }) });
+  if (f.meToken.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ meToken: f.meToken.value.trim() }) });
   toast('Configurações salvas! ⚙️', 'ok');
 }
