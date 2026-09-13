@@ -22,6 +22,7 @@ function renderSide(active, badges = {}) {
       <a href="#/categorias" class="${active === 'categorias' ? 'on' : ''}">🗂️ Categorias</a>
       <a href="#/clientes" class="${active === 'clientes' ? 'on' : ''}">👥 Clientes</a>
       <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
+      <a href="#/pagamentos" class="${active === 'pagamentos' ? 'on' : ''}">💳 Pagamentos</a>
       <a href="#/banners" class="${active === 'banners' ? 'on' : ''}">🖼️ Banners</a>
       <a href="#/relatorios" class="${active === 'relatorios' ? 'on' : ''}">📈 Relatórios</a>
       <a href="#/mensagens" class="${active === 'mensagens' ? 'on' : ''}">✉️ Mensagens ${badges.msg ? `<span class="n">${badges.msg}</span>` : ''}</a>
@@ -45,6 +46,7 @@ async function route() {
     if (path === 'categorias') return viewCategories();
     if (path === 'clientes') return viewCustomers();
     if (path === 'cupons') return viewCoupons();
+    if (path === 'pagamentos') return viewPayments();
     if (path === 'banners') return viewBanners();
     if (path === 'relatorios') return viewReports();
     if (path === 'mensagens') return viewMessages();
@@ -382,20 +384,62 @@ async function viewMessages() {
 async function readMsg(id) { await api(`/api/admin/messages/${id}`, { method: 'PUT', body: '{}' }); viewMessages(); }
 
 /* ---------- CONFIG ---------- */
+/* ---------- Pagamentos ---------- */
+async function viewPayments() {
+  let mp = { mercadopago: false, hasToken: false };
+  try { mp = await api('/api/pay/status'); } catch { }
+  const c = CONFIG;
+  const on = v => v !== false ? 'checked' : '';
+  const sw = 'display:flex;gap:10px;align-items:center;padding:12px;border:1.5px solid var(--line);border-radius:10px;margin-bottom:8px;cursor:pointer;background:#fff';
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>💳 Pagamentos</h1><p>Quais formas aparecem no checkout ${mp.mercadopago ? '<span class="badge ok">MP ATIVO</span>' : '<span class="small mut">• modo simulação</span>'}</p></div></div>
+    <form onsubmit="savePayments(event)">
+    <div class="panel"><h3>💰 Métodos no checkout</h3>
+      <label style="${sw}"><input type="checkbox" name="payPix" ${on(c.payPix)} style="width:20px;height:20px"> <b>⚡ Pix</b> <span class="mut small">aprovação imediata + desconto %</span></label>
+      <label style="${sw}"><input type="checkbox" name="payCard" ${on(c.payCard)} style="width:20px;height:20px"> <b>💳 Cartão de crédito</b> <span class="mut small">parcelado sem juros</span></label>
+      <label style="${sw}"><input type="checkbox" name="payBoleto" ${on(c.payBoleto)} style="width:20px;height:20px"> <b>🧾 Boleto</b> <span class="mut small">compensa em 1-2 dias</span></label>
+    </div>
+    <div class="grid2">
+      <div class="panel"><h3>⚡ Pix manual</h3>
+        <label class="lbl">Chave Pix</label><input class="inp" name="pixKey" value="${esc(c.pixKey || '')}" placeholder="e-mail, CPF, telefone ou aleatória">
+        <div style="margin-top:8px"><label class="lbl">Nome do recebedor</label><input class="inp" name="pixName" value="${esc(c.pixName || '')}" placeholder="Como aparece no comprovante"></div>
+        <div style="margin-top:8px;max-width:200px"><label class="lbl">Desconto no Pix (%)</label><input class="inp" name="pixDiscount" type="number" step="0.5" value="${c.pixDiscount ?? 5}"></div>
+      </div>
+      <div class="panel"><h3>💳 Cartão e parcelas</h3>
+        <div style="max-width:200px"><label class="lbl">Parcelas sem juros (máx)</label><input class="inp" name="installmentMax" type="number" value="${c.installmentMax ?? 6}"></div>
+        <p class="small mut" style="margin-top:8px">Na simulação o cartão é "aprovado" na hora. Com Mercado Pago ativo, o cliente paga no ambiente seguro do MP.</p>
+      </div>
+    </div>
+    <div class="panel"><h3>🔷 Mercado Pago <span class="small mut">(recebimento real)</span></h3>
+      <label style="font-weight:700"><input type="checkbox" name="mpEnabled" ${c.mpEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar Mercado Pago</label>
+      <div style="margin-top:8px;max-width:520px"><label class="lbl">Access Token (produção ou teste)</label><input class="inp mono" name="mpToken" type="password" value="" placeholder="${mp.hasToken ? '•••••• token salvo (digite para trocar)' : 'APP_USR-...'}"></div>
+      <p class="small mut">Pegue em <b>mercadopago.com.br → Suas integrações → Credenciais</b>. Comece com o token de TESTE. Status: ${mp.mercadopago ? '<b style="color:var(--ok)">conectado ✅</b>' : '<b>desconectado</b> (checkout em simulação)'}.</p>
+    </div>
+    <button class="btn big">Salvar pagamentos ✅</button></form>`;
+}
+async function savePayments(e) {
+  e.preventDefault(); const f = e.target;
+  const body = { payPix: f.payPix.checked, payCard: f.payCard.checked, payBoleto: f.payBoleto.checked, pixKey: f.pixKey.value.trim(), pixName: f.pixName.value.trim(), pixDiscount: Number(f.pixDiscount.value) || 0, installmentMax: Number(f.installmentMax.value) || 1, mpEnabled: f.mpEnabled.checked };
+  if (f.mpToken.value.trim()) body.mpToken = f.mpToken.value.trim();
+  if (!body.payPix && !body.payCard && !body.payBoleto) { toast('Ative ao menos 1 método!', 'err'); return; }
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify(body) });
+  toast('Pagamentos salvos! 💳', 'ok'); viewPayments();
+}
+
 function viewConfig() {
   const c = CONFIG;
-  $('#view').innerHTML = `<div class="main-hd"><div><h1>⚙️ Configurações</h1><p>Dados da loja, frete e pagamento</p></div></div>
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>⚙️ Configurações</h1><p>Dados da loja e frete • pagamento em <a class="link-more" href="#/pagamentos">💳 Pagamentos</a></p></div></div>
   <div class="panel"><form onsubmit="saveConfig(event)" style="max-width:640px">
     <div class="row2"><div><label class="lbl">Nome da loja</label><input class="inp" name="storeName" value="${esc(c.storeName)}"></div><div><label class="lbl">Telefone</label><input class="inp" name="phone" value="${esc(c.phone)}"></div></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">E-mail</label><input class="inp" name="email" value="${esc(c.email)}"></div><div><label class="lbl">WhatsApp (só números)</label><input class="inp" name="whatsapp" value="${esc(c.whatsapp)}"></div></div>
     <div style="margin-top:8px"><label class="lbl">Horário de atendimento</label><input class="inp" name="hours" value="${esc(c.hours)}"></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Frete PAC (R$)</label><input class="inp" name="shipPAC" type="number" step="0.01" value="${c.shipPAC}"></div><div><label class="lbl">Frete SEDEX (R$)</label><input class="inp" name="shipSEDEX" type="number" step="0.01" value="${c.shipSEDEX}"></div></div>
-    <div class="row2" style="margin-top:8px"><div><label class="lbl">Frete grátis acima de (R$)</label><input class="inp" name="freeShipFrom" type="number" step="0.01" value="${c.freeShipFrom}"></div><div><label class="lbl">Desconto Pix (%)</label><input class="inp" name="pixDiscount" type="number" value="${c.pixDiscount}"></div></div>
-    <div style="margin-top:8px;max-width:200px"><label class="lbl">Parcelas sem juros</label><input class="inp" name="installmentMax" type="number" value="${c.installmentMax}"></div>
+    <div style="margin-top:8px;max-width:300px"><label class="lbl">Frete grátis acima de (R$)</label><input class="inp" name="freeShipFrom" type="number" step="0.01" value="${c.freeShipFrom}"></div>
+    
     <button class="btn" style="margin-top:12px">Salvar configurações ✅</button></form></div>`;
 }
 async function saveConfig(e) {
   e.preventDefault(); const f = e.target;
-  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), pixDiscount: Number(f.pixDiscount.value), installmentMax: Number(f.installmentMax.value) }) });
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value) }) });
   toast('Configurações salvas! ⚙️', 'ok');
 }

@@ -215,6 +215,7 @@ async function pageCheckout() {
   const me = await api('/api/auth/me');
   Auth.set({ token: Auth.token, user: me });
   renderCkAddresses(me.addresses || []);
+  renderCkPay();
   $('#ck-items').innerHTML = Cart.items.map(i => `<div class="mini"><div class="t" style="background:linear-gradient(135deg,${i.grad?.[0] || '#0B1E3B'},${i.grad?.[1] || '#1E5AA8'})">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.configLabel || '')}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('');
   ckTotals();
 }
@@ -242,6 +243,15 @@ async function ckApplyCoupon() {
     const c = await api('/api/coupons/validate', { method: 'POST', body: JSON.stringify({ code, subtotal: Cart.subtotal() }) });
     CK.coupon = c; toast(`Cupom ${c.code} aplicado! 🎟️`, 'ok'); ckTotals();
   } catch (e) { toast(e.message, 'err'); }
+}
+function renderCkPay() {
+  const defs = [['pix', 'payPix', 'Pix', '<small>' + (CONFIG.pixDiscount || 5) + '% OFF'], ['card', 'payCard', 'Cartão', '<small>até ' + (CONFIG.installmentMax || 6) + 'x'], ['boleto', 'payBoleto', 'Boleto', '<small>1-2 dias']];
+  const icons = { pix: '⚡', card: '💳', boleto: '🧾' };
+  const avail = defs.filter(d => CONFIG[d[1]] !== false);
+  if (!avail.length) avail.push(defs[0]);
+  if (!avail.find(d => d[0] === CK.pay)) CK.pay = avail[0][0];
+  const box = document.querySelector('#ck-paym');
+  if (box) box.innerHTML = avail.map(d => `<button data-pay="${d[0]}" class="${CK.pay === d[0] ? 'on' : ''}" onclick="ckSetPay('${d[0]}')">${icons[d[0]]} ${d[2]}${d[3]}</small></button>`).join('');
 }
 function ckSetShip(v) {
   CK.shipType = v;
@@ -298,8 +308,8 @@ async function ckFinish() {
       }
     } catch (e) { console.warn('MP indisponível, usando simulação:', e.message); }
     if (CK.pay === 'pix') openModal(`<div style="text-align:center;padding:10px"><h2>⚡ Pague no Pix</h2><p>Pedido <b>${order.code}</b> criado! Total: <b>${BRL(order.total)}</b></p>
-      <div style="font-size:90px">📱</div><p class="mono" style="background:var(--bg);padding:10px;border-radius:8px;font-size:12px">00020126580014BR.GOV.BCB.PIX...${order.code}</p>
-      <p class="small mut">(Demonstração — pagamento aprovado automaticamente ✅)</p>
+      <div style="font-size:90px">📱</div><p class="mono" style="background:var(--bg);padding:10px;border-radius:8px;font-size:12px">${CONFIG.pixKey ? esc(CONFIG.pixKey) : '00020126580014BR.GOV.BCB.PIX...' + order.code}</p>
+      <p class="small mut">${CONFIG.pixKey ? 'Após pagar, acompanhe aqui — confirmamos rapidinho 😉' : '(Demonstração — pagamento aprovado automaticamente ✅)'}</p>
       <a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
     else if (CK.pay === 'boleto') openModal(`<div style="text-align:center;padding:10px"><h2>🧾 Boleto gerado</h2><p>Pedido <b>${order.code}</b> • Total: <b>${BRL(order.total)}</b></p><div style="font-size:70px;letter-spacing:2px">||||| |||| |||</div><p class="mono small">34191.79001 01043.510047 91020.150008 9 999900000${String(Math.round(order.total * 100)).padStart(8, '0')}</p><a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
     else { toast('Pagamento aprovado! 🎉', 'ok'); location.href = '/conta.html#/pedidos'; }

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=11"></head>
+<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=12"></head>
 <body data-page="checkout">
 <div id="site-header"></div>
 <div class="wrap">
@@ -25,9 +25,7 @@
         <button class="pill" onclick="ckSetShip('Retirada');$$('.card .pills .pill').forEach((b,i)=>b.classList.toggle('on',i===2))">🏪 Retirada na loja</button></div>
         <div id="ck-pickup" style="display:none;margin-top:10px;background:#F0FDF4;border:1.5px solid #16A34A;border-radius:10px;padding:12px">🏪 <b>Retirada na loja — GRÁTIS</b><br><span class="small">Sem frete e sem endereço de entrega. Avisamos quando seu pedido estiver pronto! 🎉</span></div></div>
       <div class="card"><h3>💳 Pagamento</h3>
-        <div class="paym"><button data-pay="pix" class="on" onclick="ckSetPay('pix')">⚡ Pix<small>5% OFF à vista</small></button>
-        <button data-pay="card" onclick="ckSetPay('card')">💳 Cartão<small>em até 6x sem juros</small></button>
-        <button data-pay="boleto" onclick="ckSetPay('boleto')">🧾 Boleto<small>1-2 dias p/ compensar</small></button></div></div>
+        <div class="paym" id="ck-paym"></div></div>
       <div class="card"><h3>🎨 Arte do pedido <span class="small mut">(opcional agora)</span></h3>
         <label class="filebox" style="display:block">📤 <b>Clique para enviar sua arte</b><br><span class="small mut">PDF, JPG, PNG, AI, PSD, CDR — até 60MB</span>
         <input type="file" hidden onchange="ckArt(this)"></label><div id="ck-art-ok" class="small" style="margin-top:8px"></div></div>
@@ -40,5 +38,5 @@
   </div>
 </div>
 <div id="site-footer"></div>
-<script src="/js/app.js?v=11"></script><script src="/js/shop.js?v=11"></script>
+<script src="/js/app.js?v=12"></script><script src="/js/shop.js?v=12"></script>
 </body></html>

@@ -433,7 +433,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 3011-3399', whatsapp: '5581999990000',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6,
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '',
   };
 
   return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, messages: [], config };
@@ -480,7 +480,7 @@ function calcPrice(product, sel = {}) {
    ROTAS — PÚBLICO
    ============================================================ */
 app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-app.get('/api/config', (req, res) => res.json(loadDB().config));
+app.get('/api/config', (req, res) => { const { mpToken, ...pub } = loadDB().config; res.json(pub); });
 app.get('/api/categories', (req, res) => {
   const db = loadDB();
   const withCount = db.categories.map(c => ({ ...c, count: db.products.filter(p => p.category === c.id && p.active !== false).length }));
@@ -818,9 +818,11 @@ app.put('/api/admin/messages/:id', auth, admin, (req, res) => {
    Configure MP_ACCESS_TOKEN no .env ou nas variáveis da hospedagem.
    Sem token, o checkout segue em modo simulação.
    ============================================================ */
-app.get('/api/pay/status', (req, res) => res.json({ mercadopago: !!process.env.MP_ACCESS_TOKEN }));
+const mpToken = () => loadDB().config.mpToken || process.env.MP_ACCESS_TOKEN || '';
+app.get('/api/pay/status', (req, res) => { const c = loadDB().config; const tk = mpToken(); res.json({ mercadopago: !!tk && (c.mpEnabled || !!process.env.MP_ACCESS_TOKEN), hasToken: !!tk }); });
 app.post('/api/pay/mp-preference', auth, async (req, res) => {
-  if (!process.env.MP_ACCESS_TOKEN) return res.status(400).json({ error: 'not-configured' });
+  const tk = mpToken();
+  if (!tk) return res.status(400).json({ error: 'not-configured' });
   const o = loadDB().orders.find(x => x.id === req.body.orderId && x.userId === req.user.id);
   if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
   try {
@@ -830,7 +832,7 @@ app.post('/api/pay/mp-preference', auth, async (req, res) => {
     if (o.discount) items.push({ title: 'Desconto', quantity: 1, unit_price: -Number(o.discount.toFixed(2)), currency_id: 'BRL' });
     const r = await fetch('https://api.mercadopago.com/checkout/preferences', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + process.env.MP_ACCESS_TOKEN },
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk },
       body: JSON.stringify({
         items, payer: { name: req.user.name, email: req.user.email }, external_reference: o.id,
         back_urls: base ? { success: base + '/conta.html#/pedidos', failure: base + '/checkout.html', pending: base + '/conta.html#/pedidos' } : undefined,
@@ -848,8 +850,8 @@ app.post('/api/pay/mp-webhook', async (req, res) => {
   try {
     const topic = req.query.topic || (req.body && req.body.type);
     const id = (req.body && req.body.data && req.body.data.id) || req.query.id;
-    if ((topic === 'payment' || topic === 'merchant_order') && id && process.env.MP_ACCESS_TOKEN) {
-      const r = await fetch(`https://api.mercadopago.com/v1/payments/${id}`, { headers: { Authorization: 'Bearer ' + process.env.MP_ACCESS_TOKEN } });
+    if ((topic === 'payment' || topic === 'merchant_order') && id && mpToken()) {
+      const r = await fetch(`https://api.mercadopago.com/v1/payments/${id}`, { headers: { Authorization: 'Bearer ' + mpToken() } });
       const pay = await r.json().catch(() => ({}));
       if (pay.status === 'approved' && pay.external_reference) {
         const o = loadDB().orders.find(x => x.id === pay.external_reference);
