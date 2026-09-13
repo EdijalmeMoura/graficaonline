@@ -118,7 +118,7 @@ async function pageProduct() {
       <div class="rate">★ ${Number(PD.rating).toFixed(1)} • ${(PD.sold || 0).toLocaleString('pt-BR')} vendidos</div>
       <p class="mut">${esc(PD.desc)}</p>
       <div class="spec"><span>🚚 Envio p/ todo Brasil</span><span>🛡️ Prova digital grátis</span><span>⚡ Expressa disponível</span></div>
-      <div class="small mut">📐 <a class="link-more" href="/pagina.html?p=gabaritos">Baixar gabarito deste produto</a></div>
+      <div class="small mut">📐 <a class="link-more" href="/pagina.html?p=gabaritos">Baixar gabarito deste produto</a></div><div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap"><a class="btn sm ghost" target="_blank" href="https://wa.me/?text=${encodeURIComponent(PD.name + ' na PrimePrint \uD83D\uDDA8\uFE0F: ' + location.href)}">\uD83D\uDCF7 Compartilhar</a><button class="btn sm ghost" onclick="navigator.clipboard?.writeText(location.href);toast('Link copiado! \uD83D\uDD17','ok')">\uD83D\uDD17 Copiar link</button></div>
     </div>`;
   $('#pd-cfg').innerHTML = `
     <div id="pd-steps"></div>
@@ -133,6 +133,7 @@ async function pageProduct() {
   $('#pd-cep').oninput = e => { e.target.value = e.target.value.replace(/\D/g, '').replace(/(\d{5})(\d)/, '$1-$2'); };
   $('#pd-shiptype').onchange = pdNumbers;
   renderCfg();
+  loadRelated();
 }
 function renderCfg() {
   $('#pd-steps').innerHTML = cfgSteps().map(s => {
@@ -152,6 +153,16 @@ function renderCfg() {
     return `<div class="opt">${hd}<div class="pills">${pills}</div></div>`;
   }).join('');
   pdNumbers();
+}
+async function loadRelated() {
+  try {
+    const list = (await api(`/api/products?category=${PD.category}`)).filter(p => p.id !== PD.id).slice(0, 4);
+    if (!list.length) return;
+    const sec = document.createElement('section');
+    sec.className = 'block';
+    sec.innerHTML = `<div class="sec-hd"><div><span class="kick">Continue explorando</span><h2>\uD83D\uDCA1 Quem viu, também levou</h2></div><a class="link-more" href="/produtos.html?cat=${PD.category}">Ver categoria →</a></div><div class="prod-grid">${list.map(productCard).join('')}</div>`;
+    document.querySelector('.pd').after(sec);
+  } catch {}
 }
 function pdNumbers() {
   PD_CALC = clientPrice(PDSEL);

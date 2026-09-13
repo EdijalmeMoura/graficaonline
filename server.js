@@ -39,7 +39,7 @@ const upload = multer({
   storage,
   limits: { fileSize: 60 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const ok = /\.(pdf|jpg|jpeg|png|ai|psd|cdr|zip|rar|tif|tiff|eps)$/i.test(file.originalname || '');
+    const ok = /\.(pdf|jpg|jpeg|png|webp|gif|svg|ai|psd|cdr|zip|rar|tif|tiff|eps)$/i.test(file.originalname || '');
     cb(ok ? null : new Error('Tipo de arquivo não permitido'), ok);
   }
 });

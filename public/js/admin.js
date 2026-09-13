@@ -171,7 +171,7 @@ function editProduct(id) {
     <div><label class="lbl">Selo (opcional)</label><input class="inp" name="badge" value="${esc(p.badge || '')}" placeholder="Ex: Oferta, Novo"></div></div>
     <div style="margin-top:8px"><label class="lbl">Chamada curta</label><input class="inp" name="tagline" value="${esc(p.tagline || '')}"></div>
     <div style="margin-top:8px"><label class="lbl">Descrição</label><textarea class="inp" name="desc" rows="2">${esc(p.desc || '')}</textarea></div>
-    <div style="margin-top:8px"><label class="lbl">Tabela de quantidades (qty:preço, separados por vírgula)</label><input class="inp mono" name="quantities" value="${p.quantities.map(q => q.qty + ':' + q.price).join(', ')}"></div>
+    <div style="margin-top:8px"><label class="lbl">Tabela de quantidades (qty:preço, separados por vírgula)</label><input class="inp mono" name="quantities" value="${p.quantities.map(q => q.qty + ':' + q.price).join(', ')}"></div><div style="margin-top:8px"><label class="lbl">📷 Foto do produto</label><div id="ep-imgprev">${p.img ? `<img src="${p.img}" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-bottom:8px">` : ''}</div><div class="row2"><div><label class="filebox" style="display:block;padding:12px">📤 <b>Enviar foto</b><input type="file" hidden accept="image/*" onchange="epUpload(this)"></label></div><div><input class="inp" name="img" value="${esc(p.img || '')}" placeholder="ou cole a URL da imagem"></div></div></div>
     <button class="btn block" style="margin-top:12px">Salvar produto ✅</button></form></div>`);
 }
 async function saveProduct(e, id) {
@@ -179,12 +179,26 @@ async function saveProduct(e, id) {
   const quantities = f.quantities.value.split(',').map(s => { const [qty, price] = s.split(':').map(Number); return { qty, price }; }).filter(q => q.qty > 0 && q.price > 0);
   if (!quantities.length) { toast('Tabela de quantidades inválida', 'err'); return; }
   const body = { name: f.name.value, category: f.category.value, icon: f.icon.value, badge: f.badge.value, tagline: f.tagline.value, desc: f.desc.value, quantities };
+  const imgVal = (f.img.value || '').trim();
+  if (imgVal) body.img = imgVal;
   if (id) await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify(body) });
   else {
     const base = PRODUCTS[0];
     await api('/api/products', { method: 'POST', body: JSON.stringify({ ...body, grad: ['#0B1E3B', '#FF4D00'], formats: base.formats, papers: base.papers, colors: base.colors, finishes: base.finishes, deadlines: base.deadlines }) });
   }
   closeModal(); toast('Produto salvo! ✅', 'ok'); viewProducts();
+}
+async function epUpload(input) {
+  const f = input.files[0]; if (!f) return;
+  toast('Enviando foto... \u23F3');
+  try {
+    const up = await uploadFile(f);
+    document.querySelector('input[name=img]').value = up.url;
+    const prev = document.querySelector('#ep-imgprev');
+    if (prev) prev.innerHTML = `<img src="${up.url}" style="width:100%;max-height:160px;object-fit:cover;border-radius:10px;margin-bottom:8px">`;
+    toast('Foto enviada! \uD83D\uDCF7', 'ok');
+  } catch (e) { toast(e.message, 'err'); }
+  input.value = '';
 }
 async function toggleProduct(id, active) { await api(`/api/products/${id}`, { method: 'PUT', body: JSON.stringify({ active }) }); viewProducts(); }
 async function delProduct(id) { if (!confirm('Excluir este produto?')) return; await api(`/api/products/${id}`, { method: 'DELETE' }); toast('Excluído 🗑️', 'ok'); viewProducts(); }
