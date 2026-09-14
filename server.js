@@ -541,9 +541,9 @@ app.post('/api/coupons/validate', (req, res) => {
   res.json({ code: c.code, desc: c.desc, discount, freeship });
 });
 app.post('/api/contact', (req, res) => {
-  const { name, email, subject, message } = req.body;
+  const { name, email, subject, message, whatsapp = '' } = req.body;
   if (!name || !email || !message) return res.status(400).json({ error: 'Preencha nome, e-mail e mensagem' });
-  loadDB().messages.push({ id: uid('m-'), name, email, subject: subject || '', message, at: new Date().toISOString(), read: false });
+  loadDB().messages.push({ id: uid('m-'), name, email, whatsapp: String(whatsapp).slice(0, 20), subject: subject || '', message, at: new Date().toISOString(), read: false, replied: false, reply: '' });
   saveDB();
   res.json({ ok: true });
 });
@@ -909,7 +909,11 @@ app.put('/api/config', auth, admin, (req, res) => {
 app.get('/api/admin/messages', auth, admin, (req, res) => res.json(loadDB().messages));
 app.put('/api/admin/messages/:id', auth, admin, (req, res) => {
   const m = loadDB().messages.find(x => x.id === req.params.id);
-  if (m) m.read = true; saveDB(); res.json({ ok: true });
+  if (!m) return res.status(404).json({ error: 'Não encontrada' });
+  if (req.body.read !== undefined) m.read = !!req.body.read;
+  if (req.body.replied !== undefined) m.replied = !!req.body.replied;
+  if (req.body.reply !== undefined) { m.reply = String(req.body.reply).slice(0, 2000); m.repliedAt = new Date().toISOString(); }
+  saveDB(); res.json({ ok: true });
 });
 
 

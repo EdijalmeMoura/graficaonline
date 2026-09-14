@@ -559,15 +559,71 @@ async function saveTpls() {
 }
 
 /* ---------- MENSAGENS ---------- */
+/* ---------- Mensagens ---------- */
+let MSGS = [];
 async function viewMessages() {
-  const list = await api('/api/admin/messages');
-  $('#view').innerHTML = `<div class="main-hd"><div><h1>✉️ Mensagens</h1><p>Fale conosco do site</p></div></div>
-  <div class="panel">${list.length ? list.map(m => `<div style="border-bottom:1px solid var(--line);padding:12px 0;${m.read ? 'opacity:.65' : ''}">
-    <b>${esc(m.name)}</b> <span class="small mut">${esc(m.email)} • ${fmtDT(m.at)}</span> ${m.read ? '' : '<span class="badge sale">nova</span>'}<br>
-    <b class="small">${esc(m.subject || '(sem assunto)')}</b><p class="small">${esc(m.message)}</p>
-    ${m.read ? '' : `<button class="btn sm ghost" onclick="readMsg('${m.id}')">Marcar como lida</button>`}</div>`).join('') : `<div class="empty"><div class="e">📭</div><p>Nenhuma mensagem.</p></div>`}</div>`;
+  MSGS = await api('/api/admin/messages');
+  MSGS.sort((a, b) => new Date(b.at) - new Date(a.at));
+  const badge = m => m.replied ? '<span class="badge ok">respondida</span>' : m.read ? '<span class="badge">lida</span>' : '<span class="badge sale">nova</span>';
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>Mensagens</h1><p>Fale conosco do site • clique para ler e responder</p></div></div>
+    <div class="panel">${MSGS.length ? MSGS.map(m => `
+      <div onclick="openMsg('${m.id}')" style="border-bottom:1px solid var(--line);padding:12px 6px;cursor:pointer;${m.read ? 'opacity:.7' : ''}">
+        <b>${esc(m.name)}</b> <span class="small mut">${esc(m.email)}${m.whatsapp ? ' • ' + esc(m.whatsapp) : ''} • ${fmtDT(m.at)}</span> ${badge(m)}<br>
+        <b class="small">${esc(m.subject || '(sem assunto)')}</b><br>
+        <span class="small mut">${esc(m.message.slice(0, 120))}${m.message.length > 120 ? '...' : ''}</span>
+      </div>`).join('') : `<div class="empty"><div class="e">📭</div><p>Nenhuma mensagem.</p></div>`}</div>`;
 }
-async function readMsg(id) { await api(`/api/admin/messages/${id}`, { method: 'PUT', body: '{}' }); viewMessages(); }
+async function readMsg(id) { await api(`/api/admin/messages/${id}`, { method: 'PUT', body: JSON.stringify({ read: true }) }); viewMessages(); }
+function msgWa(m) {
+  let d = String(m.whatsapp || '').replace(/[^0-9]/g, '');
+  if (d.length >= 10 && d.length <= 11) d = '55' + d;
+  return d.length >= 12 ? d : '';
+}
+function openMsg(id) {
+  const m = MSGS.find(x => x.id === id);
+  if (!m) return;
+  const wa = msgWa(m);
+  openModal(`<div class="mh"><h3 style="margin:0">Mensagem</h3><button class="btn sm ghost" onclick="closeModal()">✕</button></div>
+  <div class="mb">
+    <p><b>${esc(m.name)}</b><br><span class="small mut">${esc(m.email)}${m.whatsapp ? ' • ' + esc(m.whatsapp) : ''} • ${fmtDT(m.at)}</span></p>
+    <p><b>${esc(m.subject || '(sem assunto)')}</b></p>
+    <div style="background:var(--bg);border-radius:10px;padding:12px;margin-bottom:12px;white-space:pre-wrap">${esc(m.message)}</div>
+    ${m.replied && m.reply ? `<p class="small"><b>Sua última resposta:</b></p><div style="background:#F0FDF4;border-radius:10px;padding:12px;margin-bottom:12px;white-space:pre-wrap">${esc(m.reply)}</div>` : ''}
+    <label class="lbl">Sua resposta</label>
+    <textarea class="inp" id="msg-reply" rows="4" placeholder="Olá! Obrigado pelo contato...">${esc(m.reply || '')}</textarea>
+    <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
+      <button class="btn sm navy" onclick="saveReply('${m.id}')">Salvar resposta</button>
+      ${wa ? `<button class="btn sm" style="background:#25D366;color:#fff;border:0" onclick="sendWaReply('${m.id}')">Enviar no WhatsApp</button>` : '<span class="small mut">cliente sem WhatsApp</span>'}
+      <button class="btn sm ghost" onclick="mailReply('${m.id}')">Por e-mail</button>
+      <button class="btn sm ghost" onclick="copyReply()">Copiar</button>
+    </div>
+  </div>`);
+  if (!m.read) api(`/api/admin/messages/${m.id}`, { method: 'PUT', body: JSON.stringify({ read: true }) }).then(() => { m.read = true; });
+}
+async function saveReply(id) {
+  const txt = document.querySelector('#msg-reply').value.trim();
+  if (!txt) { toast('Escreva a resposta', 'err'); return; }
+  await api(`/api/admin/messages/${id}`, { method: 'PUT', body: JSON.stringify({ reply: txt, replied: true, read: true }) });
+  closeModal(); toast('Resposta salva!', 'ok'); viewMessages();
+}
+async function sendWaReply(id) {
+  const m = MSGS.find(x => x.id === id);
+  const txt = document.querySelector('#msg-reply').value.trim();
+  if (!txt) { toast('Escreva a resposta primeiro', 'err'); return; }
+  await api(`/api/admin/messages/${id}`, { method: 'PUT', body: JSON.stringify({ reply: txt, replied: true, read: true }) });
+  window.open('https://wa.me/' + msgWa(m) + '?text=' + encodeURIComponent(txt), '_blank');
+  closeModal(); viewMessages();
+}
+function mailReply(id) {
+  const m = MSGS.find(x => x.id === id);
+  const txt = document.querySelector('#msg-reply').value.trim();
+  location.href = 'mailto:' + m.email + '?subject=' + encodeURIComponent('Re: ' + (m.subject || 'Contato PrimePrint')) + '&body=' + encodeURIComponent(txt);
+}
+function copyReply() {
+  navigator.clipboard?.writeText(document.querySelector('#msg-reply').value);
+  toast('Resposta copiada!', 'ok');
+}
 
 /* ---------- CONFIG ---------- */
 /* ---------- Pagamentos ---------- */
