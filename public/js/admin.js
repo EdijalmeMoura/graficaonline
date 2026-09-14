@@ -25,6 +25,7 @@ function renderSide(active, badges = {}) {
       <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
       <a href="#/pagamentos" class="${active === 'pagamentos' ? 'on' : ''}">💳 Pagamentos</a>
       <a href="#/banners" class="${active === 'banners' ? 'on' : ''}">🖼️ Banners</a>
+      <a href="#/gabaritos" class="${active === 'gabaritos' ? 'on' : ''}">📐 Gabaritos</a>
       <a href="#/relatorios" class="${active === 'relatorios' ? 'on' : ''}">📈 Relatórios</a>
       <a href="#/bi" class="${active === 'bi' ? 'on' : ''}">📊 BI Gerencial</a>
       <a href="#/mensagens" class="${active === 'mensagens' ? 'on' : ''}">✉️ Mensagens ${badges.msg ? `<span class="n">${badges.msg}</span>` : ''}</a>
@@ -51,6 +52,7 @@ async function route() {
     if (path === 'cupons') return viewCoupons();
     if (path === 'pagamentos') return viewPayments();
     if (path === 'banners') return viewBanners();
+    if (path === 'gabaritos') return viewTemplates();
     if (path === 'relatorios') return viewReports();
     if (path === 'bi') return viewBI();
     if (path === 'mensagens') return viewMessages();
@@ -518,6 +520,42 @@ async function viewBI() {
       </div>
       <div class="panel"><h3>👑 Top clientes</h3>${topCli.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Cliente</th><th>Pedidos</th><th>Total</th></tr>${topCli.map(t => `<tr><td><b>${esc(t.name)}</b></td><td>${t.n}</td><td><b>${BRL(Math.round(t.v * 100) / 100)}</b></td></tr>`).join('')}</table></div>` : '<p class="mut">—</p>'}</div>
     </div>`;
+}
+
+/* ---------- Gabaritos ---------- */
+let TPLS = [];
+async function viewTemplates() {
+  TPLS = await api('/api/templates');
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>📐 Gabaritos</h1><p>Arquivos para download na página de gabaritos • sem link = botão WhatsApp</p></div>
+      <div style="margin-left:auto;display:flex;gap:8px"><button class="btn ghost" onclick="addTpl()">＋ Novo</button><button class="btn" onclick="saveTpls()">💾 Salvar tudo</button></div></div>
+    <div style="display:flex;flex-direction:column;gap:12px">${TPLS.map((t, i) => `
+      <div class="panel" style="margin:0">
+        <div class="row2"><div><label class="lbl">Produto</label><input class="inp" value="${esc(t.product)}" oninput="tplSet(${i},'product',this.value)"></div>
+        <div><label class="lbl">Formato</label><input class="inp" value="${esc(t.format)}" oninput="tplSet(${i},'format',this.value)" placeholder="Ex: 9x5cm + sangria"></div></div>
+        <div style="margin-top:8px"><label class="lbl">Descrição (opcional)</label><input class="inp" value="${esc(t.desc || '')}" oninput="tplSet(${i},'desc',this.value)"></div>
+        <div style="margin-top:8px"><label class="lbl">Link do arquivo (ou suba abaixo)</label><input class="inp mono" value="${esc(t.file || '')}" oninput="tplSet(${i},'file',this.value)" placeholder="https://... ou /uploads/arquivo.pdf"></div>
+        <div style="display:flex;gap:8px;margin-top:10px;align-items:center;flex-wrap:wrap">
+          <input type="file" id="tfile-${i}" hidden onchange="tplUpload(${i},this)">
+          <button class="btn sm navy" onclick="document.querySelector('#tfile-${i}').click()">📤 Subir arquivo</button>
+          ${t.file ? `<a class="btn sm ghost" href="${t.file}" target="_blank">Testar link</a>` : '<span class="small mut">sem arquivo: mostra WhatsApp</span>'}
+          <button class="btn sm danger" style="margin-left:auto" onclick="delTpl(${i})">Excluir</button>
+        </div>
+      </div>`).join('') || '<div class="panel"><p class="mut">Nenhum gabarito. Clique em Novo.</p></div>'}</div>`;
+}
+function tplSet(i, f, v) { TPLS[i][f] = v; }
+function addTpl() { TPLS.push({ product: '', format: '', file: '', desc: '' }); viewTemplates(); }
+function delTpl(i) { if (confirm('Excluir este gabarito?')) { TPLS.splice(i, 1); viewTemplates(); } }
+async function tplUpload(i, input) {
+  const f = input.files[0]; if (!f) return;
+  toast('Subindo arquivo...');
+  try { const up = await uploadFile(f); TPLS[i].file = up.url; toast('Arquivo pronto! Agora salve tudo', 'ok'); viewTemplates(); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function saveTpls() {
+  if (TPLS.some(t => !t.product.trim())) { toast('Todo gabarito precisa do nome do produto', 'err'); return; }
+  await api('/api/templates', { method: 'PUT', body: JSON.stringify({ templates: TPLS }) });
+  toast('Gabaritos salvos!', 'ok');
 }
 
 /* ---------- MENSAGENS ---------- */

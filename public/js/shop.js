@@ -440,9 +440,11 @@ function pageDoc() {
     'politicas': `<h1>Nossas políticas 📜</h1><h2>Privacidade (LGPD)</h2><p>Seus dados são usados apenas para processar pedidos e melhorar sua experiência. Nunca vendemos informações. Você pode pedir exclusão quando quiser.</p><h2>Qualidade</h2><p>Todo pedido passa por prova digital e controle de qualidade. Defeito de impressão = reimpressão ou reembolso.</p><h2>Entrega</h2><p>Enviamos via PAC/SEDEX para todo o Brasil ou retire grátis na loja. Frete grátis em compras acima de <b>${BRL(CONFIG.freeShipFrom || 299)}</b>. Atrasos da transportadora geram acompanhamento dedicado.</p><h2>Trocas e devoluções</h2><p>Produtos personalizados seguem arte aprovada. Erro nosso? Reimpressão imediata. Erro na arte enviada pelo cliente? Reimprimimos com 30% de desconto. 🤝</p>`,
   };
   $('#doc').innerHTML = T[p] || T['quem-somos'];
-  if (p === 'gabaritos') api('/api/products').then(list => {
-    $('#gab-grid').innerHTML = list.map(x => `<div class="gab"><b>${x.icon} ${esc(x.name)}</b><div class="small mut">${esc(x.formats?.[0]?.label || '')} • PDF + AI</div><button class="btn sm ghost" onclick="toast('Gabarito baixado! 📐','ok')">⬇️ Baixar</button></div>`).join('');
-  });
+  if (p === 'gabaritos') api('/api/templates').then(list => {
+    const box = document.querySelector('#gab-grid');
+    if (!box) return;
+    box.innerHTML = list.length ? list.map(t => `<div class="gab"><b>📐 ${esc(t.product)}</b><div class="small mut">${esc(t.format || '')}${t.desc ? ' • ' + esc(t.desc) : ''}</div>${t.file ? `<a class="btn sm navy" href="${t.file}" target="_blank" download>⬇️ Baixar</a>` : `<a class="btn sm ghost" target="_blank" href="https://wa.me/${CONFIG.whatsapp || ''}?text=${encodeURIComponent('Olá! Quero o gabarito: ' + t.product)}">💬 Pedir no WhatsApp</a>`}</div>`).join('') : '<p class="mut">Gabaritos em breve. Fale com a gente no WhatsApp! 💬</p>';
+  }).catch(() => {});
 }
 async function sendContact(e) {
   e.preventDefault();

@@ -436,6 +436,12 @@ function seed() {
     freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', monthlyGoal: 30000,
   };
 
+  const templates = [
+    { id: 't-seed1', product: 'Cartão de Visita', format: '9x5cm + sangria', file: '', desc: 'Frente e verso', updatedAt: new Date().toISOString() },
+    { id: 't-seed2', product: 'Panfleto', format: '10x15cm + sangria', file: '', desc: '', updatedAt: new Date().toISOString() },
+    { id: 't-seed3', product: 'Folder A4', format: '21x30cm + sangria', file: '', desc: 'Com 2 dobras', updatedAt: new Date().toISOString() },
+    { id: 't-seed4', product: 'Banner', format: '90x120cm', file: '', desc: 'Lona + bastão', updatedAt: new Date().toISOString() },
+  ];
   const cvSeed = products.find(p => p.id === 'cartao-visita');
   if (cvSeed) {
     cvSeed.reviews = [
@@ -444,7 +450,7 @@ function seed() {
     ];
     cvSeed.rating = 5;
   }
-  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, messages: [], config };
+  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, templates, messages: [], config };
 }
 
 /* ---------------- Auth helpers ---------------- */
@@ -886,6 +892,11 @@ app.put('/api/coupons/:id', auth, admin, (req, res) => {
 app.delete('/api/coupons/:id', auth, admin, (req, res) => {
   const db = loadDB();
   db.coupons = db.coupons.filter(x => x.id !== req.params.id);
+  saveDB(); res.json({ ok: true });
+});
+app.get('/api/templates', (req, res) => res.json(loadDB().templates || []));
+app.put('/api/templates', auth, admin, (req, res) => {
+  loadDB().templates = (req.body.templates || []).map(t => ({ ...t, id: t.id || uid('t-'), updatedAt: new Date().toISOString() }));
   saveDB(); res.json({ ok: true });
 });
 app.put('/api/banners', auth, admin, (req, res) => {
