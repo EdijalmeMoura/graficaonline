@@ -84,3 +84,12 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.8px}
 @media(max-width:900px){.side-x{display:block}}
 @media(max-width:640px){.chart .bar i{font-size:8px}.panel{padding:16px}.kpis{grid-template-columns:1fr 1fr}}
 @media(max-width:400px){.kpis{grid-template-columns:1fr}}
+
+/* ---------- Impressão (BI/relatórios) ---------- */
+@media print{
+  .side,.dash-top,.main-hd button,#toasts,.wpp{display:none !important}
+  .dash{display:block}
+  .main{max-width:none;padding:0}
+  .panel{box-shadow:none;break-inside:avoid}
+  body{background:#fff}
+}

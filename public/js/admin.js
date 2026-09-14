@@ -420,16 +420,46 @@ function exportCSV() {
 
 /* ---------- BI Gerencial ---------- */
 let BI_DAYS = 30;
+function biDonut(segs) {
+  const tot = segs.reduce((s, x) => s + x.v, 0) || 1;
+  let a0 = -90; const R = 54, C = 2 * Math.PI * R;
+  const arcs = segs.map(s => {
+    const frac = s.v / tot;
+    const pic = `<circle cx="70" cy="70" r="${R}" fill="none" stroke="${s.c}" stroke-width="22" stroke-dasharray="${(frac * C).toFixed(1)} ${(C - frac * C).toFixed(1)}" transform="rotate(${a0.toFixed(1)} 70 70)"/>`;
+    a0 += frac * 360; return pic;
+  }).join('');
+  return `<div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap"><svg width="140" height="140" viewBox="0 0 140 140">${arcs}<text x="70" y="68" text-anchor="middle" font-size="15" font-weight="800" fill="#0B1E3B">${BRL(Math.round(tot))}</text><text x="70" y="86" text-anchor="middle" font-size="10" fill="#64748B">total</text></svg><div>${segs.map(s => `<div style="font-size:13px;margin:5px 0"><span style="display:inline-block;width:12px;height:12px;border-radius:4px;background:${s.c};margin-right:6px"></span>${esc(s.label)} <b>${BRL(Math.round(s.v))}</b> <span class="mut">(${Math.round(s.v / tot * 100)}%)</span></div>`).join('')}</div></div>`;
+}
+function biArea(pts) {
+  const W = 600, H = 165, P = 10;
+  const max = Math.max(...pts.map(p => p.v), 1);
+  const X = i => P + i * (W - 2 * P) / Math.max(pts.length - 1, 1);
+  const Y = v => H - P - 14 - (v / max) * (H - 40);
+  const line = pts.map((p, i) => `${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const gid = 'bi' + Math.floor(Math.random() * 1e6);
+  return `<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block"><defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF4D00" stop-opacity=".45"/><stop offset="1" stop-color="#FF4D00" stop-opacity=".03"/></linearGradient></defs><polygon points="${P},${H - P - 14} ${line} ${W - P},${H - P - 14}" fill="url(#${gid})"/><polyline points="${line}" fill="none" stroke="#FF4D00" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>${pts.map((p, i) => i % 5 === 0 || i === pts.length - 1 ? `<text x="${X(i)}" y="${H - 2}" font-size="10" fill="#64748B" text-anchor="middle">${p.label}</text>` : '').join('')}</svg>`;
+}
+function biDelta(cur, prev) {
+  if (!prev) return '<small class="mut">—</small>';
+  const d = Math.round((cur - prev) / prev * 100);
+  if (d === 0) return '<small class="mut">= estável</small>';
+  return d > 0 ? `<small style="color:var(--ok)">▲ +${d}%</small>` : `<small style="color:var(--danger)">▼ ${d}%</small>`;
+}
 async function viewBI() {
   if (!PRODUCTS.length) { try { PRODUCTS = await api('/api/products'); } catch { } }
-  const cutoff = BI_DAYS ? Date.now() - BI_DAYS * 864e5 : 0;
-  const valid = ORDERS.filter(o => o.status !== 'cancelado' && (!cutoff || new Date(o.createdAt).getTime() >= cutoff));
+  const span = BI_DAYS ? BI_DAYS * 864e5 : 0;
+  const cutoff = span ? Date.now() - span : 0;
+  const inPer = o => !cutoff || new Date(o.createdAt).getTime() >= cutoff;
+  const valid = ORDERS.filter(o => o.status !== 'cancelado' && inPer(o));
+  const prev = span ? ORDERS.filter(o => o.status !== 'cancelado' && new Date(o.createdAt).getTime() >= cutoff - span && new Date(o.createdAt).getTime() < cutoff) : [];
   const rev = valid.reduce((s, o) => s + o.total, 0);
+  const prevRev = prev.reduce((s, o) => s + o.total, 0);
   const open = ORDERS.filter(o => !['entregue', 'cancelado'].includes(o.status));
   const sent = ORDERS.filter(o => (o.timeline || []).some(t => t.status === 'enviado'));
   const avgShip = sent.length ? sent.reduce((s, o) => { const ev = o.timeline.find(t => t.status === 'enviado'); return s + (new Date(ev.at) - new Date(o.createdAt)) / 864e5; }, 0) / sent.length : 0;
   const allRev = []; PRODUCTS.forEach(p => (p.reviews || []).forEach(r => allRev.push(r.stars)));
   const sat = allRev.length ? allRev.reduce((a, b) => a + b, 0) / allRev.length : 0;
+  const entry = ORDERS.filter(o => o.status !== 'cancelado').length || 1;
   const funnel = [...FLOW, 'cancelado'].map(st => { const l = ORDERS.filter(o => o.status === st); return { st, n: l.length, v: l.reduce((s, o) => s + o.total, 0) }; });
   const fmax = Math.max(...funnel.map(f => f.n), 1);
   const dAgo = d => Date.now() - d * 864e5;
@@ -438,28 +468,41 @@ async function viewBI() {
   const payPend = ORDERS.filter(o => o.payment?.status !== 'paid' && o.status !== 'cancelado');
   const payPendV = payPend.reduce((s, o) => s + o.total, 0);
   const rejArt = ORDERS.filter(o => o.art?.status === 'rejected');
+  const byPay = {};
+  valid.forEach(o => byPay[o.payment?.method || 'pix'] = (byPay[o.payment?.method || 'pix'] || 0) + o.total);
+  const payColors = { pix: '#16A34A', card: '#2563EB', boleto: '#D97706' };
+  const payNames = { pix: 'Pix', card: 'Cartão', boleto: 'Boleto' };
   const days = [];
-  for (let i = 13; i >= 0; i--) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i); days.push({ t: d.getTime(), label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), v: 0 }); }
+  for (let i = 29; i >= 0; i--) { const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i); days.push({ t: d.getTime(), label: d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), v: 0 }); }
   ORDERS.filter(o => o.status !== 'cancelado').forEach(o => { const t = new Date(o.createdAt); t.setHours(0, 0, 0, 0); const dd = days.find(x => x.t === t.getTime()); if (dd) dd.v += o.total; });
-  const dmax = Math.max(...days.map(d => d.v), 1);
   const cmap = {};
   valid.forEach(o => { const k = o.customer?.name || '—'; const c = cmap[k] = cmap[k] || { name: k, n: 0, v: 0 }; c.n++; c.v += o.total; });
   const topCli = Object.values(cmap).sort((a, b) => b.v - a.v).slice(0, 5);
+  const goal = CONFIG.monthlyGoal || 30000;
+  const mStart = new Date(); mStart.setDate(1); mStart.setHours(0, 0, 0, 0);
+  const mRev = ORDERS.filter(o => o.status !== 'cancelado' && new Date(o.createdAt) >= mStart).reduce((s, o) => s + o.total, 0);
+  const gPct = Math.min(100, Math.round(mRev / goal * 100));
   const alertRow = (icon, txt, list) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);flex-wrap:wrap"><span>${icon} ${txt}</span><b>${list.length ? list.map(o => o.code).slice(0, 4).join(', ') + (list.length > 4 ? ` +${list.length - 4}` : '') : '<span style="color:var(--ok)">tudo certo ✅</span>'}</b></div>`;
+  const kpi = (icon, label, val, sub) => `<div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">${icon}</div><div class="small mut">${label}</div><h2 style="margin:4px 0">${val}</h2>${sub || ''}</div>`;
   $('#view').innerHTML = `
-    <div class="main-hd"><div><h1>📊 BI Gerencial</h1><p>Como estão os processos • período: ${[7, 30, 90].map(d => `<button class="btn sm ${BI_DAYS === d ? 'navy' : 'ghost'}" onclick="BI_DAYS=${d};viewBI()">${d}d</button>`).join(' ')} <button class="btn sm ${!BI_DAYS ? 'navy' : 'ghost'}" onclick="BI_DAYS=0;viewBI()">tudo</button></p></div></div>
+    <div class="main-hd"><div><h1>📊 BI Gerencial</h1><p>Período: ${[7, 30, 90].map(d => `<button class="btn sm ${BI_DAYS === d ? 'navy' : 'ghost'}" onclick="BI_DAYS=${d};viewBI()">${d}d</button>`).join(' ')} <button class="btn sm ${!BI_DAYS ? 'navy' : 'ghost'}" onclick="BI_DAYS=0;viewBI()">tudo</button> <span class="small mut">• atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></p></div>
+    <button class="btn navy" style="margin-left:auto" onclick="window.print()">🖨️ Imprimir</button></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px">
-      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">💰</div><div class="small mut">Faturamento</div><h2 style="margin:4px 0">${BRL(Math.round(rev * 100) / 100)}</h2><small class="mut">${valid.length} pedidos</small></div>
-      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">🏭</div><div class="small mut">Pedidos ativos</div><h2 style="margin:4px 0">${open.length}</h2><small class="mut">em andamento</small></div>
-      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">🧾</div><div class="small mut">Ticket médio</div><h2 style="margin:4px 0">${valid.length ? BRL(rev / valid.length) : '—'}</h2></div>
-      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">🚚</div><div class="small mut">Tempo até envio</div><h2 style="margin:4px 0">${sent.length ? avgShip.toFixed(1) + ' dias' : '—'}</h2></div>
-      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">⭐</div><div class="small mut">Satisfação</div><h2 style="margin:4px 0">${allRev.length ? sat.toFixed(1) : '—'}</h2><small class="mut">${allRev.length} avaliações</small></div>
-      <div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">💳</div><div class="small mut">A receber</div><h2 style="margin:4px 0">${BRL(Math.round(payPendV * 100) / 100)}</h2><small class="mut">${payPend.length} pedido(s)</small></div>
+      ${kpi('💰', 'Faturamento', BRL(Math.round(rev * 100) / 100), `<small class="mut">${valid.length} pedidos</small><br>${biDelta(rev, prevRev)}`)}
+      ${kpi('🏭', 'Pedidos ativos', open.length, `<small class="mut">em andamento</small><br>${biDelta(valid.length, prev.length)}`)}
+      ${kpi('🧾', 'Ticket médio', valid.length ? BRL(rev / valid.length) : '—', '')}
+      ${kpi('🚚', 'Tempo até envio', sent.length ? avgShip.toFixed(1) + ' dias' : '—', '')}
+      ${kpi('⭐', 'Satisfação', allRev.length ? sat.toFixed(1) : '—', `<small class="mut">${allRev.length} avaliações</small>`)}
+      ${kpi('💳', 'A receber', BRL(Math.round(payPendV * 100) / 100), `<small class="mut">${payPend.length} pedido(s)</small>`)}
     </div>
     <div class="grid2">
       <div class="panel"><h3>🔄 Funil de processos</h3>
-        ${funnel.map(f => `<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:6px"><span>${stTag(f.st)}</span><b>${f.n} • ${BRL(Math.round(f.v * 100) / 100)}</b></div><div style="height:8px;background:var(--bg);border-radius:99px;margin-top:3px"><div style="height:100%;width:${Math.round(f.n / fmax * 100)}%;background:${f.st === 'cancelado' ? 'var(--danger)' : 'linear-gradient(90deg,var(--primary),var(--navy))'};border-radius:99px"></div></div></div>`).join('')}
+        ${funnel.map(f => `<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:6px"><span>${stTag(f.st)} <span class="mut">${Math.round(f.n / entry * 100)}%</span></span><b>${f.n} • ${BRL(Math.round(f.v * 100) / 100)}</b></div><div style="height:8px;background:var(--bg);border-radius:99px;margin-top:3px"><div style="height:100%;width:${Math.round(f.n / fmax * 100)}%;background:${f.st === 'cancelado' ? 'var(--danger)' : 'linear-gradient(90deg,var(--primary),var(--navy))'};border-radius:99px"></div></div></div>`).join('')}
       </div>
+      <div class="panel"><h3>💳 Faturamento por pagamento</h3>${biDonut(Object.entries(byPay).map(([k, v]) => ({ v, c: payColors[k] || '#64748B', label: payNames[k] || k })))}</div>
+    </div>
+    <div class="grid2" style="margin-top:16px">
+      <div class="panel"><h3>📈 Receita — 30 dias</h3>${biArea(days)}</div>
       <div class="panel"><h3>🚨 Alertas de gestão</h3>
         ${alertRow('🎨', `Aguard. arte há +3 dias (${artStuck.length})`, artStuck)}
         ${alertRow('📦', `Enviado sem rastreio (${noTrack.length})`, noTrack)}
@@ -468,7 +511,11 @@ async function viewBI() {
       </div>
     </div>
     <div class="grid2" style="margin-top:16px">
-      <div class="panel"><h3>📈 Receita — 14 dias</h3><div style="display:flex;align-items:flex-end;gap:4px;height:130px">${days.map(d => `<div style="flex:1;text-align:center" title="${d.label}: ${BRL(Math.round(d.v * 100) / 100)}"><div style="height:${Math.max(3, Math.round(d.v / dmax * 95))}px;background:linear-gradient(180deg,var(--primary),var(--navy));border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--mut)">${d.label.slice(0, 5)}</div></div>`).join('')}</div></div>
+      <div class="panel"><h3>🎯 Meta do mês — ${BRL(goal)}</h3>
+        <div style="height:22px;background:var(--bg);border-radius:99px;overflow:hidden"><div style="height:100%;width:${gPct}%;background:linear-gradient(90deg,#16A34A,#4ADE80);border-radius:99px;transition:.5s"></div></div>
+        <p style="margin:8px 0 0"><b>${gPct}%</b> • ${BRL(Math.round(mRev * 100) / 100)} de ${BRL(goal)} ${mRev >= goal ? '🏆 <b>Meta batida!</b>' : `• faltam <b>${BRL(Math.round((goal - mRev) * 100) / 100)}</b>`}</p>
+        <p class="small mut">Ajuste a meta em <a class="link-more" href="#/config">⚙️ Configurações</a></p>
+      </div>
       <div class="panel"><h3>👑 Top clientes</h3>${topCli.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Cliente</th><th>Pedidos</th><th>Total</th></tr>${topCli.map(t => `<tr><td><b>${esc(t.name)}</b></td><td>${t.n}</td><td><b>${BRL(Math.round(t.v * 100) / 100)}</b></td></tr>`).join('')}</table></div>` : '<p class="mut">—</p>'}</div>
     </div>`;
 }
@@ -549,7 +596,7 @@ async function viewConfig() {
     <div class="row2" style="margin-top:8px"><div><label class="lbl">E-mail</label><input class="inp" name="email" value="${esc(c.email)}"></div><div><label class="lbl">WhatsApp (só números)</label><input class="inp" name="whatsapp" value="${esc(c.whatsapp)}"></div></div>
     <div style="margin-top:8px"><label class="lbl">Horário de atendimento</label><input class="inp" name="hours" value="${esc(c.hours)}"></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Frete PAC (R$)</label><input class="inp" name="shipPAC" type="number" step="0.01" value="${c.shipPAC}"></div><div><label class="lbl">Frete SEDEX (R$)</label><input class="inp" name="shipSEDEX" type="number" step="0.01" value="${c.shipSEDEX}"></div></div>
-    <div style="margin-top:8px;max-width:300px"><label class="lbl">Frete grátis acima de (R$)</label><input class="inp" name="freeShipFrom" type="number" step="0.01" value="${c.freeShipFrom}"></div>
+    <div style="margin-top:8px;max-width:300px"><label class="lbl">Frete grátis acima de (R$)</label><input class="inp" name="freeShipFrom" type="number" step="0.01" value="${c.freeShipFrom}"></div><div style="margin-top:8px;max-width:300px"><label class="lbl">🎯 Meta mensal (R$) — p/ BI</label><input class="inp" name="monthlyGoal" type="number" step="0.01" value="${c.monthlyGoal ?? 30000}"></div>
     
     <h3 style="margin-top:16px">📮 Frete real (Melhor Envio)</h3>
     <p class="small mut">Status: ${me.meActive ? '<b style="color:var(--ok)">cotação ao vivo ✅</b>' : '<b>tabela manual</b>'} • <a class="link-more" href="https://www.melhorenvio.com.br" target="_blank">criar conta grátis →</a></p>
@@ -561,7 +608,7 @@ async function viewConfig() {
 }
 async function saveConfig(e) {
   e.preventDefault(); const f = e.target;
-  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked }) });
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, monthlyGoal: Number(f.monthlyGoal.value) || 0 }) });
   if (f.meToken.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ meToken: f.meToken.value.trim() }) });
   toast('Configurações salvas! ⚙️', 'ok');
 }

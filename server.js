@@ -433,7 +433,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '',
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', monthlyGoal: 30000,
   };
 
   const cvSeed = products.find(p => p.id === 'cartao-visita');
