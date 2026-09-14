@@ -13,7 +13,7 @@ function renderSide(active = '') {
   const u = Auth.user;
   const pend = ORDERS.filter(o => !['entregue', 'cancelado'].includes(o.status)).length;
   $('#side').innerHTML = `
-    <a class="logo" href="/index.html" style="color:#fff">${LOGO_SVG}<span>${esc(CONFIG.storeName || 'PrimePrint')}<small>MINHA CONTA</small></span></a>
+    <a class="logo" href="/index.html" style="color:#fff">${LOGO_SVG}<span>${esc(CONFIG.storeName || 'PrimePrint')}<small>MINHA CONTA</small></span></a><button class="side-x" onclick="document.querySelector('.side').classList.remove('on')">✕</button>
     <div class="who"><div class="av">${esc(u.name[0].toUpperCase())}</div><div><b>${esc(u.name.split(' ').slice(0, 2).join(' '))}</b><span>${esc(u.email)}</span></div></div>
     <nav>
       <a href="#/inicio" class="${active === 'inicio' ? 'on' : ''}">📊 Visão geral</a>
@@ -180,11 +180,11 @@ async function reorder(id) {
 function viewFiles() {
   const arts = ORDERS.filter(o => o.art?.file || o.status === 'aguardando_arte');
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🎨 Minhas artes</h1><p>Arquivos enviados e pendências • <a class="link-more" href="/pagina.html?p=gabaritos">📐 Baixar gabaritos</a></p></div></div>
-  <div class="panel">${arts.length ? `<table class="tbl"><tr><th>Pedido</th><th>Arquivo</th><th>Status</th><th></th></tr>
+  <div class="panel">${arts.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Arquivo</th><th>Status</th><th></th></tr>
     ${arts.map(o => `<tr><td><b>${o.code}</b><br><span class="small mut">${o.items.map(i => esc(i.name)).join(', ')}</span></td>
     <td>${o.art?.file ? `📎 ${esc(o.art.originalName || 'arquivo')}` : '<span class="mut">— pendente —</span>'}</td>
     <td><span class="st st-${o.art?.status || 'pending'}">${{ pending: 'pendente', in_review: 'em análise', approved: 'aprovada ✅', rejected: 'reprovada ❌' }[o.art?.status || 'pending']}</span>${o.art?.feedback ? `<br><span class="small">💬 ${esc(o.art.feedback)}</span>` : ''}</td>
-    <td><a class="btn sm navy" href="#/pedido?id=${o.id}">${o.art?.file ? 'Ver' : 'Enviar arte'}</a></td></tr>`).join('')}</table>`
+    <td><a class="btn sm navy" href="#/pedido?id=${o.id}">${o.art?.file ? 'Ver' : 'Enviar arte'}</a></td></tr>`).join('')}</table></div>`
     : `<div class="empty"><div class="e">🎨</div><p>Nenhuma arte por aqui ainda.</p></div>`}</div>`;
 }
 

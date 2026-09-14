@@ -12,7 +12,7 @@ const stTag = s => `<span class="st st-${s}">${STATUS[s] || s}</span>`;
 
 function renderSide(active, badges = {}) {
   $('#side').innerHTML = `
-    <a class="logo" href="/index.html" style="color:#fff">${LOGO_SVG}<span>${esc(CONFIG.storeName || 'PrimePrint')}<small>ADMIN</small></span></a>
+    <a class="logo" href="/index.html" style="color:#fff">${LOGO_SVG}<span>${esc(CONFIG.storeName || 'PrimePrint')}<small>ADMIN</small></span></a><button class="side-x" onclick="document.querySelector('.side').classList.remove('on')">✕</button>
     <div class="who"><div class="av">🛠️</div><div><b>${esc(Auth.user.name)}</b><span>Administrador</span></div></div>
     <nav>
       <a href="#/dashboard" class="${active === 'dashboard' ? 'on' : ''}">📊 Dashboard</a>
@@ -257,9 +257,9 @@ async function delProduct(id) { if (!confirm('Excluir este produto?')) return; a
 /* ---------- CATEGORIAS ---------- */
 function viewCategories() {
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🗂️ Categorias</h1></div><button class="btn" style="margin-left:auto" onclick="editCat()">＋ Nova</button></div>
-  <div class="panel"><table class="tbl"><tr><th>Categoria</th><th>Produtos</th><th></th></tr>
+  <div class="panel"><div style="overflow:auto"><table class="tbl"><tr><th>Categoria</th><th>Produtos</th><th></th></tr>
   ${CATS.map(c => `<tr><td><span style="font-size:22px">${c.icon}</span> <b>${esc(c.name)}</b><br><span class="small mut">${esc(c.desc || '')}</span></td><td>${c.count ?? '—'}</td>
-  <td style="white-space:nowrap"><button class="btn sm ghost" onclick="editCat('${c.id}')">✏️</button> <button class="btn sm danger" onclick="delCat('${c.id}')">🗑️</button></td></tr>`).join('')}</table></div>`;
+  <td style="white-space:nowrap"><button class="btn sm ghost" onclick="editCat('${c.id}')">✏️</button> <button class="btn sm danger" onclick="delCat('${c.id}')">🗑️</button></td></tr>`).join('')}</table></div></div>`;
 }
 function editCat(id) {
   const c = CATS.find(x => x.id === id) || { name: '', icon: '📁', desc: '' };
@@ -292,11 +292,11 @@ async function toggleCustomer(id, active) { await api(`/api/admin/customers/${id
 async function viewCoupons() {
   const list = await api('/api/coupons');
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🎟️ Cupons</h1></div><button class="btn" style="margin-left:auto" onclick="editCoupon()">＋ Novo cupom</button></div>
-  <div class="panel"><table class="tbl"><tr><th>Código</th><th>Benefício</th><th>Mínimo</th><th>Uso</th><th>Validade</th><th>Status</th><th></th></tr>
+  <div class="panel"><div style="overflow:auto"><table class="tbl"><tr><th>Código</th><th>Benefício</th><th>Mínimo</th><th>Uso</th><th>Validade</th><th>Status</th><th></th></tr>
   ${list.map(c => `<tr><td><b class="mono">${c.code}</b><br><span class="small mut">${esc(c.desc || '')}</span></td>
   <td>${c.type === 'percent' ? c.value + '% OFF' : c.type === 'fixed' ? BRL(c.value) + ' OFF' : '🚚 Frete grátis'}</td><td>${BRL(c.min)}</td><td>${c.used}/${c.maxUses}</td><td>${c.expires || '—'}</td>
   <td>${c.active ? '<span class="badge ok">Ativo</span>' : '<span class="badge mut">Inativo</span>'}</td>
-  <td style="white-space:nowrap"><button class="btn sm ghost" onclick='editCoupon(${JSON.stringify(c.id)})'>✏️</button> <button class="btn sm danger" onclick="delCoupon('${c.id}')">🗑️</button></td></tr>`).join('')}</table></div>`;
+  <td style="white-space:nowrap"><button class="btn sm ghost" onclick='editCoupon(${JSON.stringify(c.id)})'>✏️</button> <button class="btn sm danger" onclick="delCoupon('${c.id}')">🗑️</button></td></tr>`).join('')}</table></div></div>`;
   window._coupons = list;
 }
 function editCoupon(id) {
@@ -458,7 +458,7 @@ async function viewBI() {
     </div>
     <div class="grid2">
       <div class="panel"><h3>🔄 Funil de processos</h3>
-        ${funnel.map(f => `<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:13px"><span>${stTag(f.st)}</span><b>${f.n} • ${BRL(Math.round(f.v * 100) / 100)}</b></div><div style="height:8px;background:var(--bg);border-radius:99px;margin-top:3px"><div style="height:100%;width:${Math.round(f.n / fmax * 100)}%;background:${f.st === 'cancelado' ? 'var(--danger)' : 'linear-gradient(90deg,var(--primary),var(--navy))'};border-radius:99px"></div></div></div>`).join('')}
+        ${funnel.map(f => `<div style="margin:7px 0"><div style="display:flex;justify-content:space-between;font-size:13px;flex-wrap:wrap;gap:6px"><span>${stTag(f.st)}</span><b>${f.n} • ${BRL(Math.round(f.v * 100) / 100)}</b></div><div style="height:8px;background:var(--bg);border-radius:99px;margin-top:3px"><div style="height:100%;width:${Math.round(f.n / fmax * 100)}%;background:${f.st === 'cancelado' ? 'var(--danger)' : 'linear-gradient(90deg,var(--primary),var(--navy))'};border-radius:99px"></div></div></div>`).join('')}
       </div>
       <div class="panel"><h3>🚨 Alertas de gestão</h3>
         ${alertRow('🎨', `Aguard. arte há +3 dias (${artStuck.length})`, artStuck)}
@@ -469,7 +469,7 @@ async function viewBI() {
     </div>
     <div class="grid2" style="margin-top:16px">
       <div class="panel"><h3>📈 Receita — 14 dias</h3><div style="display:flex;align-items:flex-end;gap:4px;height:130px">${days.map(d => `<div style="flex:1;text-align:center" title="${d.label}: ${BRL(Math.round(d.v * 100) / 100)}"><div style="height:${Math.max(3, Math.round(d.v / dmax * 95))}px;background:linear-gradient(180deg,var(--primary),var(--navy));border-radius:4px 4px 0 0"></div><div style="font-size:9px;color:var(--mut)">${d.label.slice(0, 5)}</div></div>`).join('')}</div></div>
-      <div class="panel"><h3>👑 Top clientes</h3>${topCli.length ? `<table class="tbl"><tr><th>Cliente</th><th>Pedidos</th><th>Total</th></tr>${topCli.map(t => `<tr><td><b>${esc(t.name)}</b></td><td>${t.n}</td><td><b>${BRL(Math.round(t.v * 100) / 100)}</b></td></tr>`).join('')}</table>` : '<p class="mut">—</p>'}</div>
+      <div class="panel"><h3>👑 Top clientes</h3>${topCli.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Cliente</th><th>Pedidos</th><th>Total</th></tr>${topCli.map(t => `<tr><td><b>${esc(t.name)}</b></td><td>${t.n}</td><td><b>${BRL(Math.round(t.v * 100) / 100)}</b></td></tr>`).join('')}</table></div>` : '<p class="mut">—</p>'}</div>
     </div>`;
 }
 
