@@ -35,6 +35,9 @@ async function pageHome() {
   $('#home-cats').innerHTML = CATS.map(c => `<a class="cat-card" href="/produtos.html?cat=${c.id}"><div class="tile">${c.icon}</div><b>${esc(c.name)}</b><span>${c.count || ''} produtos</span></a>`).join('');
   // mais vendidos
   $('#home-prods').innerHTML = products.slice(0, 8).map(productCard).join('');
+  const offers = products.filter(offerPct).slice(0, 4);
+  if ($('#home-offers')) $('#home-offers').innerHTML = offers.map(productCard).join('');
+  if ($('#offers-wrap')) $('#offers-wrap').style.display = offers.length ? '' : 'none';
   // calculadora
   const sel = $('#calc-prod');
   sel.innerHTML = products.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
@@ -93,7 +96,9 @@ function clientPrice(sel) {
   const finish = pick(PD.finishes, sel.finish); if (finish) total += (finish.add || 0);
   const deadline = pick(PD.deadlines, sel.deadline); if (deadline) total *= (deadline.mult || 1);
   total = Math.round(total * 100) / 100;
-  return { qty: q.qty, base: q.price, total, unit: Math.round((total / q.qty) * 10000) / 10000 };
+  const _offer = offerPct(PD), _old = total;
+  if (_offer) total = Math.round(total * (1 - _offer / 100) * 100) / 100;
+  return { qty: q.qty, base: q.price, total, unit: Math.round((total / q.qty) * 10000) / 10000, offerPct: _offer, oldTotal: _old };
 }
 const modHint = m => m > 0 ? ` <small class="mut">+${Math.round(m * 100)}%</small>` : m < 0 ? ` <small style="color:var(--ok);font-weight:700">−${Math.round(-m * 100)}%</small>` : '';
 function cfgSteps() {
@@ -113,7 +118,7 @@ async function pageProduct() {
   $('#crumb').innerHTML = `Início › ${esc(CATS.find(c => c.id === PD.category)?.name || 'Produtos')} › <b>${esc(PD.name)}</b>`;
   PDSEL = { format: PD.formats[0]?.id, paper: PD.papers[0]?.id, color: PD.colors[0]?.id, finish: PD.finishes[0]?.id, qty: String((PD.quantities[0]?.qty === 1 ? PD.quantities[0] : PD.quantities[1] ?? PD.quantities[0]).qty), deadline: PD.deadlines?.[0]?.id };
   $('#pd-media').innerHTML = `
-    <div class="big" style="background:linear-gradient(135deg,${PD.grad[0]},${PD.grad[1]})">${thumbHTML(PD)}${PD.badge ? `<span class="badge sale" style="position:absolute;top:14px;left:14px">${esc(PD.badge)}</span>` : ''}</div>
+    <div class="big" style="background:linear-gradient(135deg,${PD.grad[0]},${PD.grad[1]})">${thumbHTML(PD)}${offerPct(PD) ? `<span class="badge sale" style="position:absolute;top:14px;left:14px">−${offerPct(PD)}% 🔥</span>` : (PD.badge ? `<span class="badge sale" style="position:absolute;top:14px;left:14px">${esc(PD.badge)}</span>` : '')}</div>
     <div class="info"><h1 style="font-size:24px;margin:0">${esc(PD.name)}</h1>
       <div class="rate">★ ${Number(PD.rating).toFixed(1)} • ${(PD.sold || 0).toLocaleString('pt-BR')} vendidos</div>
       <p class="mut">${esc(PD.desc)}</p>
@@ -122,7 +127,7 @@ async function pageProduct() {
     </div>`;
   $('#pd-cfg').innerHTML = `
     <div id="pd-steps"></div>
-    <div class="price-box"><div class="v"><div><span>Total</span><br><b id="pd-total">…</b><br><span id="pd-unit"></span></div><div style="text-align:right"><span>📦 Frete</span><br><b id="pd-ship" style="font-size:18px">…</b></div></div>
+    <div class="price-box"><div class="v"><div><span>Total</span> <span id="pd-offer"></span><br><b id="pd-total">…</b> <small id="pd-old"></small><br><span id="pd-unit"></span></div><div style="text-align:right"><span>📦 Frete</span><br><b id="pd-ship" style="font-size:18px">…</b></div></div>
       <div class="pix">⚡ <b>${CONFIG.pixDiscount || 5}% OFF no Pix</b> → <b id="pd-pix"></b></div></div>
     <div class="row2"><div><label class="lbl">📮 CEP de entrega</label><input class="inp" id="pd-cep" placeholder="00000-000" maxlength="9"></div>
     <div><label class="lbl">🚚 Opção</label><select class="inp" id="pd-shiptype"><option value="PAC">PAC — ${BRL(CONFIG.shipPAC ?? 19.9)}</option><option value="SEDEX">SEDEX — ${BRL(CONFIG.shipSEDEX ?? 29.9)}</option><option value="Retirada">🏪 Retirada na loja — GRÁTIS</option></select></div></div>
@@ -200,6 +205,9 @@ async function pdQuote(d) {
 function pdNumbers() {
   PD_CALC = clientPrice(PDSEL);
   $('#pd-total').textContent = BRL(PD_CALC.total);
+  const _op = offerPct(PD);
+  $('#pd-old').innerHTML = _op ? `<s class="mut">${BRL(PD_CALC.oldTotal || PD_CALC.total)}</s>` : '';
+  $('#pd-offer').innerHTML = _op ? `<span class="badge sale">−${_op}% 🔥${PD.offerEnds ? ' até ' + PD.offerEnds.split('-').reverse().join('/') : ''}</span>` : '';
   $('#pd-unit').textContent = `${BRL(PD_CALC.unit)} por unidade • ${PD_CALC.qty.toLocaleString('pt-BR')} un`;
   $('#pd-pix').textContent = BRL(PD_CALC.total * (1 - (CONFIG.pixDiscount || 5) / 100));
   const pdv = document.querySelector('#pd-shiptype')?.value;
@@ -234,11 +242,11 @@ function pageCart() {
     <div class="card"><h3>Resumo</h3><div class="totals">
       <div class="tt"><span>Subtotal</span><b>${BRL(sub)}</b></div>
       <div class="tt"><span>Frete</span>${free ? '<span class="free">GRÁTIS 🎉</span>' : `<span>a partir de ${BRL(CONFIG.shipPAC ?? 19.9)}</span>`}</div>
-      ${!free ? `<small class="mut">Faltam <b>${BRL((CONFIG.freeShipFrom || 299) - sub)}</b> para o frete grátis 🚚</small>` : ''}
+      ${freeShipBar(sub)}
       <div class="tt gt"><span>Total</span><span>${BRL(sub)}</span></div></div>
       <a class="btn big block" style="margin-top:14px" href="/checkout.html">Finalizar compra →</a>
       <a class="btn ghost block" style="margin-top:8px" href="/produtos.html">Continuar comprando</a></div>
-    <div class="card"><h3>🎟️ Tem cupom?</h3><p class="small mut">Você aplica o cupom na próxima etapa, no checkout.</p><p class="small">💡 Teste: <b class="mono">BEMVINDO10</b></p></div>`;
+    <div class="card"><h3>🎟️ Tem cupom?</h3><p class="small mut">Você aplica o cupom na próxima etapa, no checkout.</p><p class="small">💡 1ª compra? Use <b class="mono">BEMVINDO10</b> no checkout 🎟️</p></div>`;
 }
 
 /* ---------- CHECKOUT ---------- */
@@ -377,7 +385,7 @@ function ckTotals() {
     ${ptsBalance > 0 ? `<div class="tt"><span>🎁 Pontos (saldo ${ptsBalance})</span><span><input class="inp mono" id="ck-pts" type="number" min="0" max="${ptsMax}" value="${CK.pointsUsed}" style="width:80px;display:inline-block;padding:6px"> <button class="btn sm navy" onclick="ckApplyPoints()">OK</button></span></div>${ptsOff ? `<div class="tt"><span>Desconto pontos</span><b style="color:var(--ok)">−${BRL(ptsOff)}</b></div>` : ''}<small class="mut">10 pontos = R$ 1 • máx ${ptsMax} neste pedido</small>` : ''}
     <div class="tt"><span>Frete (${esc(CK.shipLabel || CK.shipType)})</span>${ship === 0 ? '<span class="free">GRÁTIS 🎉</span>' : `<b>${BRL(ship)}</b>`}</div>
     <div class="tt gt"><span>Total</span><span>${BRL(total)}</span></div>
-    ${CK.pay === 'card' ? `<small class="mut">em até ${CONFIG.installmentMax || 6}x de ${BRL(total / (CONFIG.installmentMax || 6))} sem juros</small>` : ''}</div>`;
+    ${CK.pay === 'card' ? `<small class="mut">em até ${CONFIG.installmentMax || 6}x de ${BRL(total / (CONFIG.installmentMax || 6))} sem juros</small>` : ''}${freeShipBar(sub - desc - pixOff)}</div>`;
 }
 function ckApplyPoints() {
   CK.pointsUsed = Math.max(0, Math.floor(Number(document.querySelector('#ck-pts')?.value) || 0));

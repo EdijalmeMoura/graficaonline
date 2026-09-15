@@ -397,7 +397,7 @@ function seed() {
   ];
 
   const coupons = [
-    { id: 'c1', code: 'BEMVINDO10', type: 'percent', value: 10, min: 100, maxUses: 500, used: 37, expires: '2026-12-31', active: true, desc: '10% OFF na primeira compra acima de R$ 100' },
+    { id: 'c1', code: 'BEMVINDO10', type: 'percent', value: 10, min: 100, maxUses: 500, used: 37, expires: '2026-12-31', active: true, firstOnly: true, desc: '10% OFF na primeira compra acima de R$ 100' },
     { id: 'c2', code: 'PRINT15', type: 'percent', value: 15, min: 300, maxUses: 200, used: 12, expires: '2026-12-31', active: true, desc: '15% OFF em compras acima de R$ 300' },
     { id: 'c3', code: 'FRETEGRATIS', type: 'freeship', value: 0, min: 299, maxUses: 1000, used: 210, expires: '2026-12-31', active: true, desc: 'Frete grátis acima de R$ 299' },
   ];
@@ -474,6 +474,7 @@ function admin(req, res, next) {
 const pubUser = u => ({ id: u.id, name: u.name, email: u.email, phone: u.phone, cpf: u.cpf, role: u.role, addresses: u.addresses || [], favorites: u.favorites || [], points: u.points || 0, createdAt: u.createdAt });
 
 /* ---------------- Precificação ---------------- */
+const offerPct = p => { const pct = Number(p?.offerPct) || 0; if (pct <= 0) return 0; if (p.offerEnds && p.offerEnds < new Date().toISOString().slice(0, 10)) return 0; return Math.min(90, pct); };
 function calcPrice(product, sel = {}) {
   const q = product.quantities.find(x => String(x.qty) === String(sel.qty)) || product.quantities[0];
   const format = (product.formats || []).find(x => x.id === sel.format);
@@ -488,7 +489,9 @@ function calcPrice(product, sel = {}) {
   if (finish) total += (finish.add || 0);
   if (deadline) total *= (deadline.mult || 1);
   total = Math.round(total * 100) / 100;
-  return { qty: q.qty, base: q.price, total, unit: Math.round((total / q.qty) * 10000) / 10000 };
+  const _offer = offerPct(product), _old = total;
+  if (_offer) total = Math.round(total * (1 - _offer / 100) * 100) / 100;
+  return { qty: q.qty, base: q.price, total, unit: Math.round((total / q.qty) * 10000) / 10000, offerPct: _offer, oldTotal: _old };
 }
 
 /* ============================================================
@@ -535,6 +538,12 @@ app.post('/api/coupons/validate', (req, res) => {
   if (c.expires && new Date(c.expires) < new Date()) return res.status(400).json({ error: 'Cupom expirado' });
   if (c.used >= c.maxUses) return res.status(400).json({ error: 'Cupom esgotado' });
   if (subtotal < c.min) return res.status(400).json({ error: `Pedido mínimo de R$ ${c.min.toFixed(2)}` });
+  if (c.firstOnly) {
+    let _uid = null;
+    try { const _h = req.headers.authorization || ''; if (_h.startsWith('Bearer ')) _uid = jwt.verify(_h.slice(7), SECRET).id; } catch {}
+    if (!_uid) return res.status(400).json({ error: 'Entre na sua conta para usar este cupom' });
+    if (loadDB().orders.some(o => o.userId === _uid && o.status !== 'cancelado')) return res.status(400).json({ error: 'Cupom válido só na primeira compra' });
+  }
   let discount = 0, freeship = false;
   if (c.type === 'percent') discount = Math.round(subtotal * c.value) / 100;
   if (c.type === 'fixed') discount = c.value;
@@ -689,7 +698,7 @@ app.post('/api/orders', auth, async (req, res) => {
   let discount = 0, freeship = false, couponCode = null;
   if (coupon) {
     const c = db.coupons.find(x => x.code === String(coupon).toUpperCase().trim() && x.active);
-    if (c && subtotal >= c.min && c.used < c.maxUses) {
+    if (c && subtotal >= c.min && c.used < c.maxUses && (!c.firstOnly || !db.orders.some(o => o.userId === req.user.id && o.status !== 'cancelado'))) {
       couponCode = c.code; c.used += 1;
       if (c.type === 'percent') discount = Math.round(subtotal * c.value) / 100;
       if (c.type === 'fixed') discount = c.value;

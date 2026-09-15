@@ -155,6 +155,7 @@ function renderMiniCart() {
   const f = $('#mini-foot');
   if (f) f.innerHTML = items.length ? `
     <div class="totals"><div class="tt"><span>Subtotal</span><b>${BRL(Cart.subtotal())}</b></div></div>
+    ${freeShipBar(Cart.subtotal())}
     <div style="display:flex;gap:8px;margin-top:12px"><a class="btn ghost block" href="/carrinho.html">Ver carrinho</a><a class="btn block" href="/checkout.html">Finalizar</a></div>` : '';
 }
 function ensureCartDrawer() {
@@ -171,15 +172,24 @@ function ensureCartDrawer() {
 function openCart() { ensureCartDrawer(); $('#cart-drawer').classList.add('on'); $('#overlay').classList.add('on'); renderMiniCart(); }
 function closeCart() { $('#cart-drawer')?.classList.remove('on'); $('#overlay')?.classList.remove('on'); }
 
+const offerPct = p => { const pct = Number(p?.offerPct) || 0; if (pct <= 0) return 0; if (p.offerEnds && p.offerEnds < new Date().toISOString().slice(0, 10)) return 0; return Math.min(90, pct); };
+function freeShipBar(sub) {
+  const goal = CONFIG.freeShipFrom || 299;
+  if (sub >= goal) return `<p style="margin:8px 0;font-weight:700;color:var(--ok)">🚚 Você ganhou FRETE GRÁTIS! 🎉</p>`;
+  const pct = Math.min(100, Math.round(sub / goal * 100));
+  return `<div style="margin:8px 0"><small class="mut">Faltam <b>${BRL(goal - sub)}</b> para o frete grátis 🚚</small><div style="height:8px;background:var(--bg);border:1px solid var(--line);border-radius:99px;margin-top:4px"><div style="height:100%;width:${pct}%;background:linear-gradient(90deg,var(--primary),var(--navy));border-radius:99px"></div></div></div>`;
+}
 function productCard(p) {
   const fav = (Auth.user?.favorites || []).includes(p.id) ? '❤️' : '🤍';
+  const _op = offerPct(p);
+  const _base = p.minPrice ?? Math.min(...p.quantities.map(q => q.price));
   return `<div class="prod">
-    ${p.badge ? `<span class="badge sale" style="position:absolute;top:10px;left:10px;z-index:2">${esc(p.badge)}</span>` : ''}
+    ${_op ? `<span class="badge sale" style="position:absolute;top:10px;left:10px;z-index:2">−${_op}% 🔥</span>` : (p.badge ? `<span class="badge sale" style="position:absolute;top:10px;left:10px;z-index:2">${esc(p.badge)}</span>` : '')}
     <button class="fav" onclick="toggleFav(event,'${p.id}')" title="Favoritar">${fav}</button>
     <a href="/produto.html?id=${p.id}"><div class="thumb" style="background:linear-gradient(135deg,${p.grad?.[0] || '#0B1E3B'},${p.grad?.[1] || '#1E5AA8'})">${thumbHTML(p)}</div>
     <div class="body"><b>${esc(p.name)}</b><span class="tag">${esc(p.tagline || '')}</span>
     <span class="stars">★ ${Number(p.rating || 5).toFixed(1)} <span class="mut">(${(p.sold || 0).toLocaleString('pt-BR')})</span></span>
-    <div class="price"><small>a partir de</small><b><i>${BRL(p.minPrice ?? Math.min(...p.quantities.map(q => q.price)))}</i></b></div>
+    <div class="price"><small>a partir de</small>${_op ? `<small class="mut"><s>${BRL(_base)}</s></small>` : ''}<b><i>${BRL(_op ? Math.round(_base * (1 - _op / 100) * 100) / 100 : _base)}</i></b></div>
     </div></a></div>`;
 }
 async function toggleFav(e, id) {
