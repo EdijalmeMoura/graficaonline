@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 88" width="320" height="88" role="img" aria-label="PrimePrint Gráfica Online">
+  <title>PrimePrint — Gráfica Online</title>
+  <defs>
+    <linearGradient id="ppg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#FF4D00"/>
+      <stop offset="1" stop-color="#FF8A00"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(4,12) scale(1.4545)">
+    <rect width="44" height="44" rx="12" fill="url(#ppg)"/>
+    <path d="M13 32V12h11a7 7 0 0 1 0 14h-6v6z" fill="#ffffff"/>
+    <circle cx="31" cy="30" r="4.5" fill="#0A1633"/>
+  </g>
+  <text x="80" y="50" font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif" font-size="33" font-weight="800" letter-spacing="-0.5" fill="#0A1633">PrimePrint</text>
+  <text x="82" y="70" font-family="Inter, 'Segoe UI', Roboto, Arial, sans-serif" font-size="12" font-weight="800" letter-spacing="4.2" fill="#FF4D00">GRÁFICA ONLINE</text>
+</svg>
