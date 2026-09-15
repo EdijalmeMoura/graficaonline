@@ -9,6 +9,7 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const multer = require('multer');
 require('dotenv').config();
 
@@ -433,7 +434,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', monthlyGoal: 30000,
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', monthlyGoal: 30000, mailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', smtpFrom: '',
   };
 
   const templates = [
@@ -494,7 +495,7 @@ function calcPrice(product, sel = {}) {
    ROTAS — PÚBLICO
    ============================================================ */
 app.get('/api/health', (req, res) => res.json({ ok: true, time: new Date().toISOString() }));
-app.get('/api/config', (req, res) => { const { mpToken, stoneToken, infpayToken, meToken, ...pub } = loadDB().config; res.json(pub); });
+app.get('/api/config', (req, res) => { const { mpToken, stoneToken, infpayToken, meToken, smtpPass, ...pub } = loadDB().config; res.json(pub); });
 app.get('/api/categories', (req, res) => {
   const db = loadDB();
   const withCount = db.categories.map(c => ({ ...c, count: db.products.filter(p => p.category === c.id && p.active !== false).length }));
@@ -751,6 +752,7 @@ app.post('/api/orders', auth, async (req, res) => {
       order.payment.gateway = 'infinitepay'; order.payment.linkUrl = paymentUrl; saveDB();
     } catch (e) { paymentError = e.message || 'Falha ao gerar link'; }
   }
+  notifyOrderCreated(order, buyer);
   res.json((paymentUrl || paymentError) ? { ...order, paymentUrl, paymentError } : order);
 });
 app.put('/api/orders/:id/art', auth, (req, res) => {
@@ -800,6 +802,7 @@ app.put('/api/orders/:id/status', auth, admin, (req, res) => {
   const o = loadDB().orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
   const { status, note = '', tracking = '' } = req.body;
+  const _prev = o.status;
   o.status = status;
   if (tracking !== undefined) o.tracking = tracking;
   if (status === 'entregue' && !o.pointsAwarded) {
@@ -809,6 +812,7 @@ app.put('/api/orders/:id/status', auth, admin, (req, res) => {
     if (u && pts > 0) { u.points = (u.points || 0) + pts; o.timeline.push({ status, at: new Date().toISOString(), note: '+' + pts + ' pontos fidelidade' }); }
   }
   o.timeline.push({ status, at: new Date().toISOString(), note });
+  if (status !== _prev) notifyStatus(o);
   saveDB(); res.json(o);
 });
 app.put('/api/orders/:id/art-review', auth, admin, (req, res) => {
@@ -819,6 +823,7 @@ app.put('/api/orders/:id/art-review', auth, admin, (req, res) => {
   o.art.feedback = feedback;
   o.status = approved ? 'aprovado' : 'aguardando_arte';
   o.timeline.push({ status: o.status, at: new Date().toISOString(), note: feedback });
+  notifyArt(o, approved, feedback);
   saveDB(); res.json(o);
 });
 app.get('/api/admin/customers', auth, admin, (req, res) => {
@@ -840,6 +845,7 @@ app.put('/api/orders/:id/pay', auth, admin, (req, res) => {
   if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
   o.payment.status = req.body.status === 'paid' ? 'paid' : 'pending';
   o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Pagamento: ' + o.payment.status });
+  if (o.payment.status === 'paid') notifyPaid(o);
   saveDB(); res.json(o);
 });
 /* Avaliações de produtos */
@@ -937,6 +943,7 @@ app.put('/api/admin/messages/:id', auth, admin, (req, res) => {
   if (req.body.read !== undefined) m.read = !!req.body.read;
   if (req.body.replied !== undefined) m.replied = !!req.body.replied;
   if (req.body.reply !== undefined) { m.reply = String(req.body.reply).slice(0, 2000); m.repliedAt = new Date().toISOString(); }
+  if (req.body.reply !== undefined && m.email) sendMail({ to: m.email, subject: 'Resposta: ' + (m.subject || 'seu contato'), title: 'Você recebeu uma resposta! ✉️', body: '<p>Olá <b>' + escHtml(m.name) + '</b>!</p><p style="background:#F8FAFF;border:1px solid #ddd;border-radius:8px;padding:12px">' + escHtml(m.reply).replace(/\n/g, '<br>') + '</p>' });
   saveDB(); res.json({ ok: true });
 });
 
@@ -989,6 +996,7 @@ app.post('/api/pay/mp-webhook', async (req, res) => {
           o.payment.status = 'paid'; o.payment.mpId = String(pay.id || id);
           o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Pagamento aprovado (Mercado Pago)' });
           saveDB();
+          notifyPaid(o);
         }
       }
     }
@@ -1059,6 +1067,7 @@ async function infpayCheck(order, extra = {}) {
     if (data.paid_amount) order.payment.paidAmount = data.paid_amount / 100;
     order.timeline.push({ status: order.status, at: new Date().toISOString(), note: 'Pagamento aprovado (InfinitePay' + (data.capture_method ? ' ' + data.capture_method : '') + ')' });
     saveDB();
+    notifyPaid(order);
     return { paid: true };
   }
   return { paid: false };
@@ -1107,6 +1116,59 @@ app.post('/api/orders/:id/notify-payment', auth, (req, res) => {
   o.payment.notified = true;
   o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Cliente avisou que pagou (' + o.payment.method + ')' });
   saveDB(); res.json({ ok: true });
+});
+
+/* ============================================================
+   E-MAIL AUTOMÁTICO — avisos de pedido, pagamento, status,
+   arte e respostas. Config: admin → Configurações (SMTP).
+   Sem config, ignora silenciosamente (nunca quebra o fluxo).
+   ============================================================ */
+const money = n => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
+const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const ST_PT = { aguardando_arte: 'Aguardando arte', em_analise: 'Em análise', aprovado: 'Arte aprovada', em_producao: 'Em produção', pronto_envio: 'Pronto para envio', enviado: 'Enviado', entregue: 'Entregue', cancelado: 'Cancelado' };
+const mailCfg = () => { const c = loadDB().config; return { enabled: c.mailEnabled === true, host: c.smtpHost || process.env.SMTP_HOST || '', port: Number(c.smtpPort || process.env.SMTP_PORT || 587), user: c.smtpUser || process.env.SMTP_USER || '', pass: c.smtpPass || process.env.SMTP_PASS || '', from: c.smtpFrom || process.env.SMTP_FROM || '' }; };
+async function sendMail({ to, subject, title, body }) {
+  try {
+    const m = mailCfg();
+    if (!m.enabled || !m.host || !m.user || !to) return { skipped: true };
+    const c = loadDB().config, store = c.storeName || 'PrimePrint', base = publicBase();
+    const html = `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;border:1px solid #eee;border-radius:12px;overflow:hidden"><div style="background:#0B1E3B;color:#fff;padding:20px;text-align:center"><b style="font-size:22px">🖨️ ${escHtml(store)}</b></div><div style="padding:24px"><h2 style="color:#0B1E3B;margin-top:0">${title}</h2><div style="color:#333;font-size:15px;line-height:1.6">${body}</div>${base ? `<p style="text-align:center;margin:24px 0 8px"><a href="${base}/conta.html#/pedidos" style="background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:10px">Acompanhar meu pedido →</a></p>` : ''}</div><div style="background:#f6f6f6;padding:14px;text-align:center;font-size:12px;color:#888">${escHtml(store)} • ${escHtml(c.phone || '')} • ${escHtml(c.hours || '')}</div></div>`;
+    await nodemailer.createTransport({ host: m.host, port: m.port, secure: m.port === 465, auth: { user: m.user, pass: m.pass } }).sendMail({ from: m.from || m.user, to, subject: subject || title, html });
+    return { sent: true };
+  } catch (e) { console.error('E-mail falhou:', e.message); return { error: e.message }; }
+}
+const orderUser = id => loadDB().users.find(u => u.id === id);
+function notifyOrderCreated(o, buyer) {
+  if (!buyer || !buyer.email) return;
+  const c = loadDB().config;
+  const items = o.items.map(i => `• ${escHtml(i.name)} (${Number(i.qty).toLocaleString('pt-BR')} un) — ${money(i.total)}`).join('<br>');
+  const pix = (o.payment.status !== 'paid' && o.payment.method === 'pix' && c.pixKey) ? `<p>⚡ <b>Pague no Pix p/ liberarmos a produção:</b><br>Chave: <b>${escHtml(c.pixKey)}</b> (${escHtml(c.pixName || '')})<br>Valor: <b>${money(o.total)}</b></p>` : '';
+  sendMail({ to: buyer.email, subject: `Recebemos seu pedido ${o.code}! 🎉`, title: `Pedido ${o.code} recebido! 🎉`, body: `<p>Olá <b>${escHtml(buyer.name)}</b>! Obrigado pela compra. Resumo:</p><p>${items}</p><p>Frete: ${o.shipping ? money(o.shipping) : 'GRÁTIS 🎉'}<br><b>Total: ${money(o.total)}</b></p>${pix}<p>${o.art?.file ? 'Sua arte já está em análise. ✅' : 'Não esqueça de <b>enviar sua arte</b> p/ não atrasar a produção. 🎨'}</p>` });
+}
+function notifyPaid(o) {
+  const u = orderUser(o.userId);
+  if (!u || !u.email) return;
+  sendMail({ to: u.email, subject: `Pagamento confirmado — ${o.code} ✅`, title: 'Pagamento confirmado! ✅', body: `<p>Olá <b>${escHtml(u.name)}</b>! Confirmamos o pagamento de <b>${money(o.total)}</b> do pedido <b>${o.code}</b>.</p><p>Agora é com a gente — acompanhe a produção em tempo real. 🚀</p>` });
+}
+function notifyStatus(o) {
+  const u = orderUser(o.userId);
+  if (!u || !u.email) return;
+  const label = ST_PT[o.status] || o.status;
+  const track = (o.status === 'enviado' && o.tracking) ? `<p>🚚 <b>Rastreio:</b> ${escHtml(o.tracking)}</p>` : '';
+  sendMail({ to: u.email, subject: `Seu pedido ${o.code}: ${label} 📦`, title: `${label} 📦`, body: `<p>Olá <b>${escHtml(u.name)}</b>! Atualização do pedido <b>${o.code}</b>:</p><p style="font-size:18px"><b>${label}</b></p>${track}` });
+}
+function notifyArt(o, approved, feedback) {
+  const u = orderUser(o.userId);
+  if (!u || !u.email) return;
+  if (approved) sendMail({ to: u.email, subject: `Arte aprovada — ${o.code} ✅`, title: 'Arte aprovada! ✅', body: `<p>Olá <b>${escHtml(u.name)}</b>! Sua arte do pedido <b>${o.code}</b> passou na conferência e já vai entrar em produção. 🖨️</p>` });
+  else sendMail({ to: u.email, subject: `Ajuste na arte — ${o.code} 🎨`, title: 'Sua arte precisa de um ajuste 🎨', body: `<p>Olá <b>${escHtml(u.name)}</b>! Revisamos a arte do pedido <b>${o.code}</b>:</p><p style="background:#FFF7ED;border:1px solid #F59E0B;border-radius:8px;padding:12px">💬 <b>${escHtml(feedback || 'Ver detalhes na sua conta')}</b></p><p>Envie a versão corrigida na sua conta p/ liberarmos a produção. 🙂</p>` });
+}
+app.post('/api/admin/mail-test', auth, admin, async (req, res) => {
+  const to = String(req.body.to || '').trim();
+  if (!to) return res.status(400).json({ error: 'Informe o e-mail' });
+  const r = await sendMail({ to, subject: 'Teste de e-mail — ' + (loadDB().config.storeName || 'PrimePrint'), title: 'Tudo certo! ✅', body: '<p>Este é um e-mail de teste da sua gráfica online. Se você recebeu, os avisos automáticos estão funcionando. 🎉</p>' });
+  if (r.sent) return res.json({ ok: true });
+  res.status(400).json({ error: r.error || 'E-mail não configurado (ative e preencha o SMTP)' });
 });
 
 /* ---------------- Estáticos ---------------- */

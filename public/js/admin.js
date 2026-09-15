@@ -117,7 +117,7 @@ function viewOrderDetail(id) {
     <div class="grid2">
       <div class="panel"><h3>🔄 Alterar status</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><select class="inp" id="nstatus" style="flex:1">${nexts.map(s => `<option value="${s}">${STATUS[s]}</option>`).join('')}</select>
-        <button class="btn" onclick="setStatus('${o.id}')">Atualizar</button></div>
+        <button class="btn" onclick="setStatus('${o.id}')">Atualizar</button> <button class="btn navy" onclick="waStatus('${o.id}')">📲 Avisar cliente</button></div>
         <div style="margin-top:10px"><label class="lbl">🚚 Código de rastreio</label><div style="display:flex;gap:8px"><input class="inp" id="ntrack" value="${esc(o.tracking || '')}" placeholder="BR...BR"><button class="btn navy sm" onclick="setStatus('${o.id}',true)">Salvar</button></div></div>
         <div style="margin-top:10px"><label class="lbl">📝 Observação interna</label><input class="inp" id="nnote" placeholder="Ex: cliente avisado no WhatsApp"></div>
         <h3 style="margin-top:18px">🧾 Itens • ${BRL(o.total)}</h3>
@@ -130,10 +130,24 @@ function viewOrderDetail(id) {
           ${o.art?.file ? `<p>📎 <a class="link-more" href="${o.art.file}" target="_blank">${esc(o.art.originalName || 'abrir arquivo')}</a> <span class="st st-${o.art.status}">${o.art.status}</span></p>
           <label class="lbl">Feedback (se reprovar)</label><input class="inp" id="art-fb" placeholder="Ex: faltou sangria, texto cortado...">
           <div style="display:flex;gap:8px;margin-top:10px"><button class="btn ok" onclick="reviewArt('${o.id}',true)">✅ Aprovar</button><button class="btn danger" onclick="reviewArt('${o.id}',false)">❌ Reprovar</button></div>`
-          : `<p class="mut">Cliente ainda não enviou a arte. <button class="btn sm navy" onclick="toast('Lembrete enviado por WhatsApp! 💬','ok')">💬 Cobrar no WhatsApp</button></p>`}</div>
+          : `<p class="mut">Cliente ainda não enviou a arte. <button class="btn sm navy" onclick="waCobrar('${o.id}')">💬 Cobrar no WhatsApp</button></p>`}</div>
         <div class="panel"><h3>📍 Linha do tempo</h3><div class="tl">${o.timeline.map(t => `<div class="ev done"><b>${STATUS[t.status] || t.status}</b><span>${fmtDT(t.at)}${t.note ? ' — ' + esc(t.note) : ''}</span></div>`).join('')}</div></div>
       </div>
     </div>`;
+}
+function waNum(p) { const d = String(p || '').replace(/\D/g, ''); if (!d) return ''; return d.length <= 11 ? '55' + d : d; }
+function waStatus(id) {
+  const o = ORDERS.find(x => x.id === id);
+  const st = document.querySelector('#nstatus')?.value || o.status;
+  const num = waNum(o.customer?.phone);
+  if (!num) { toast('Cliente sem telefone cadastrado', 'err'); return; }
+  window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(`Olá ${o.customer?.name || ''}! Atualização do pedido ${o.code} (${CONFIG.storeName || ''}): ${STATUS[st]}${o.tracking ? ' • Rastreio: ' + o.tracking : ''}. Acompanhe: ${location.origin}/conta.html#/pedidos`), '_blank');
+}
+function waCobrar(id) {
+  const o = ORDERS.find(x => x.id === id);
+  const num = waNum(o.customer?.phone);
+  if (!num) { toast('Cliente sem telefone cadastrado', 'err'); return; }
+  window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(`Olá ${o.customer?.name || ''}! Aqui é da ${CONFIG.storeName || 'PrimePrint'} 🖨️ Seu pedido ${o.code} está aguardando o envio da arte. Envie aqui: ${location.origin}/conta.html#/pedidos`), '_blank');
 }
 async function setStatus(id, onlyTrack) {
   const status = $('#nstatus')?.value || ORDERS.find(o => o.id === id).status;
@@ -698,11 +712,25 @@ async function viewConfig() {
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Largura (cm)</label><input class="inp" name="pkgWidth" type="number" value="${c.pkgWidth ?? 20}"></div><div><label class="lbl">Altura (cm)</label><input class="inp" name="pkgHeight" type="number" value="${c.pkgHeight ?? 10}"></div></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Comprimento (cm)</label><input class="inp" name="pkgLength" type="number" value="${c.pkgLength ?? 30}"></div><div><label class="lbl">Token Melhor Envio</label><input class="inp mono" name="meToken" type="password" value="" placeholder="${me.hasToken ? '•••••• salvo (digite para trocar)' : 'Cole o token'}"></div></div>
     <div style="margin-top:8px"><label style="font-weight:700"><input type="checkbox" name="meEnabled" ${c.meEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar cotação ao vivo</label></div>
+    <h3 style="margin-top:16px">📧 E-mail automático (avisos)</h3>
+    <p class="small mut">Avisa o cliente sozinho: pedido criado, pagamento aprovado, troca de status, arte e respostas. Use o SMTP da hospedagem ou Gmail com <b>senha de app</b>.</p>
+    <div style="margin-bottom:8px"><label style="font-weight:700"><input type="checkbox" name="mailEnabled" ${c.mailEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar avisos por e-mail</label></div>
+    <div class="row2"><div><label class="lbl">Servidor SMTP</label><input class="inp mono" name="smtpHost" value="${esc(c.smtpHost || '')}" placeholder="smtp.gmail.com"></div><div><label class="lbl">Porta</label><input class="inp" name="smtpPort" type="number" value="${c.smtpPort ?? 587}"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Usuário (seu e-mail)</label><input class="inp" name="smtpUser" value="${esc(c.smtpUser || '')}" placeholder="voce@gmail.com"></div><div><label class="lbl">Senha / senha de app</label><input class="inp mono" name="smtpPass" type="password" value="" placeholder="${c.smtpUser ? '•••••• salva (digite para trocar)' : 'Senha ou senha de app'}"></div></div>
+    <div style="margin-top:8px;max-width:340px"><label class="lbl">E-mail remetente (opcional)</label><input class="inp" name="smtpFrom" value="${esc(c.smtpFrom || '')}" placeholder="vendas@sualoja.com.br"></div>
+    <div style="margin-top:10px"><button type="button" class="btn sm navy" onclick="testMail()">✉️ Enviar e-mail de teste</button></div>
     <button class="btn" style="margin-top:12px">Salvar configurações ✅</button></form></div>`;
 }
 async function saveConfig(e) {
   e.preventDefault(); const f = e.target;
-  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, monthlyGoal: Number(f.monthlyGoal.value) || 0 }) });
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, monthlyGoal: Number(f.monthlyGoal.value) || 0, mailEnabled: f.mailEnabled.checked, smtpHost: f.smtpHost.value.trim(), smtpPort: Number(f.smtpPort.value) || 587, smtpUser: f.smtpUser.value.trim(), smtpFrom: f.smtpFrom.value.trim() }) });
   if (f.meToken.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ meToken: f.meToken.value.trim() }) });
+  if (f.smtpPass.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ smtpPass: f.smtpPass.value.trim() }) });
   toast('Configurações salvas! ⚙️', 'ok');
+}
+async function testMail() {
+  const to = prompt('Enviar e-mail de teste para:', CONFIG.email || '');
+  if (!to) return;
+  try { await api('/api/admin/mail-test', { method: 'POST', body: JSON.stringify({ to }) }); toast('E-mail de teste enviado! ✉️', 'ok'); }
+  catch (e) { toast(e.message, 'err'); }
 }
