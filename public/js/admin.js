@@ -103,7 +103,7 @@ function listOrders() {
   $('#orders-box').innerHTML = list.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Cliente</th><th>Itens</th><th>Total</th><th>Arte</th><th>Status</th><th></th></tr>
     ${list.map(o => `<tr><td><b>${o.code}</b><br><span class="small mut">${fmtDT(o.createdAt)}</span></td>
     <td>${esc(o.customer?.name || '—')}<br><span class="small mut">${esc(o.customer?.email || '')}</span></td>
-    <td>${o.items.map(i => `${i.icon} ${esc(i.name)}`).join('<br>')}</td><td><b>${BRL(o.total)}</b><br><span class="small mut">${o.payment.method}</span></td>
+    <td>${o.items.map(i => `${i.icon} ${esc(i.name)}`).join('<br>')}</td><td><b>${BRL(o.total)}</b><br><span class="small mut">${o.payment.method}${o.payment.gateway ? ' • ' + o.payment.gateway : ''}</span><br>${o.payment.status === 'paid' ? '<span class="badge ok">pago</span>' : '<span class="small">pendente ⏳</span>'}${o.payment.notified && o.payment.status !== 'paid' ? ' <span class="small">🔔 avisou</span>' : ''}</td>
     <td>${o.art?.file ? `📎 <span class="st st-${o.art.status}">${o.art.status}</span>` : '<span class="mut">—</span>'}</td>
     <td>${stTag(o.status)}</td><td><a class="btn sm navy" href="#/pedido?id=${o.id}">Gerenciar</a></td></tr>`).join('')}</table></div>`
     : `<div class="empty"><div class="e">📭</div><p>Nenhum pedido encontrado.</p></div>`;
@@ -122,7 +122,7 @@ function viewOrderDetail(id) {
         <div style="margin-top:10px"><label class="lbl">📝 Observação interna</label><input class="inp" id="nnote" placeholder="Ex: cliente avisado no WhatsApp"></div>
         <h3 style="margin-top:18px">🧾 Itens • ${BRL(o.total)}</h3>
         ${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
-        <p class="small mut">Subtotal ${BRL(o.subtotal)} • Desconto ${BRL(o.discount)} ${o.coupon ? '(' + o.coupon + ')' : ''} • Frete ${BRL(o.shipping)} (${o.shippingType}) • Pagto: ${o.payment.method} (<b>${o.payment.status}</b>) <button class="btn sm ${o.payment.status === 'paid' ? 'ok' : 'navy'}" onclick="togglePay('${o.id}','${o.payment.status === 'paid' ? 'pending' : 'paid'}')">${o.payment.status === 'paid' ? '✓ Pago' : 'Marcar como pago'}</button></p>
+        <p class="small mut">Subtotal ${BRL(o.subtotal)} • Desconto ${BRL(o.discount)} ${o.coupon ? '(' + o.coupon + ')' : ''} • Frete ${BRL(o.shipping)} (${o.shippingType}) • Pagto: ${o.payment.method} (<b>${o.payment.status}</b>)${o.payment.notified && o.payment.status !== 'paid' ? ' 🔔 <b>cliente avisou que pagou</b>' : ''}${o.payment.brand ? ' • ' + esc(o.payment.brand) + (o.payment.installments > 1 ? ' em ' + o.payment.installments + 'x' : '') : ''}${o.payment.linkUrl ? ` <a class="link-more small" target="_blank" href="${o.payment.linkUrl}">abrir checkout</a>` : ''} <button class="btn sm ${o.payment.status === 'paid' ? 'ok' : 'navy'}" onclick="togglePay('${o.id}','${o.payment.status === 'paid' ? 'pending' : 'paid'}')">${o.payment.status === 'paid' ? '✓ Pago' : 'Marcar como pago'}</button></p>
         <p class="small">📍 ${esc(o.address?.street || '')} — ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} • CEP ${esc(o.address?.zip || '')}</p>
         <button class="btn sm ghost" onclick="toast('Etiqueta enviada para impressão! 🖨️','ok')">🖨️ Imprimir etiqueta</button> <button class="btn sm navy" onclick="printSlip('${o.id}')">🧾 Ficha de produção</button></div>
       <div>
@@ -640,6 +640,7 @@ async function viewPayments() {
       <label style="${sw}"><input type="checkbox" name="payPix" ${on(c.payPix)} style="width:20px;height:20px"> <b>⚡ Pix</b> <span class="mut small">aprovação imediata + desconto %</span></label>
       <label style="${sw}"><input type="checkbox" name="payCard" ${on(c.payCard)} style="width:20px;height:20px"> <b>💳 Cartão de crédito</b> <span class="mut small">parcelado sem juros</span></label>
       <label style="${sw}"><input type="checkbox" name="payBoleto" ${on(c.payBoleto)} style="width:20px;height:20px"> <b>🧾 Boleto</b> <span class="mut small">compensa em 1-2 dias</span></label>
+      <label style="${sw}"><input type="checkbox" name="payInfinite" ${on(c.payInfinite)} style="width:20px;height:20px"> <b>♾️ InfinitePay</b> <span class="mut small">Pix ou cartão no checkout seguro</span></label>
     </div>
     <div class="grid2">
       <div class="panel"><h3>⚡ Pix manual</h3>
@@ -659,23 +660,22 @@ async function viewPayments() {
     </div>
     <div class="panel"><h3>🟢 Stone <span class="small mut">(recebimento real)</span></h3>
       <label style="font-weight:700"><input type="checkbox" name="stoneEnabled" ${c.stoneEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar Stone</label>
-      <div style="margin-top:8px;max-width:520px"><label class="lbl">Access Token da Stone</label><input class="inp mono" name="stoneToken" type="password" value="" placeholder="${mp.stone?.hasToken ? '•••••• token salvo (digite para trocar)' : 'Cole o access token'}"></div>
-      <p class="small mut">Pegue no painel da Stone → API/Integrações. Status: ${mp.stone?.active ? '<b style="color:var(--ok)">conectado ✅</b>' : '<b>desconectado</b>'}.</p>
+      <div style="margin-top:8px;max-width:520px"><label class="lbl">Secret Key (Pagar.me)</label><input class="inp mono" name="stoneToken" type="password" value="" placeholder="${mp.stone?.hasToken ? '•••••• salva (digite para trocar)' : 'sk_test_... ou sk_live_...'}"></div>
+      <p class="small mut">No painel <b>Pagar.me → Configurações → Chaves de API</b>, copie a <b>Secret Key</b>. Comece pela de TESTE (sk_test_...). Com ela ativa, o cartão é cobrado de verdade no checkout. Status: ${mp.stone?.active ? '<b style="color:var(--ok)">conectado ✅</b>' : '<b>desconectado</b> (cartão em simulação)'}.</p>
     </div>
     <div class="panel"><h3>♾️ InfinitePay <span class="small mut">(recebimento real)</span></h3>
       <label style="font-weight:700"><input type="checkbox" name="infpayEnabled" ${c.infpayEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar InfinitePay</label>
-      <div style="margin-top:8px;max-width:520px"><label class="lbl">Access Token da InfinitePay</label><input class="inp mono" name="infpayToken" type="password" value="" placeholder="${mp.infinitepay?.hasToken ? '•••••• token salvo (digite para trocar)' : 'Cole o access token'}"></div>
-      <p class="small mut">Pegue no app/painel da InfinitePay → Integrações/API. Status: ${mp.infinitepay?.active ? '<b style="color:var(--ok)">conectado ✅</b>' : '<b>desconectado</b>'}.</p>
+      <div style="margin-top:8px;max-width:640px"><div class="grid2"><div><label class="lbl">Sua InfiniteTag (sem o $)</label><input class="inp mono" name="infpayHandle" value="${esc(c.infpayHandle || '')}" placeholder="Ex: primeprint"></div><div><label class="lbl">URL pública da loja</label><input class="inp mono" name="publicUrl" value="${esc(c.publicUrl || '')}" placeholder="https://sualoja.com.br"></div></div></div>
+      <p class="small mut">1️⃣ No app InfinitePay: <b>Vendas → Checkout → Configurações → Habilitar Checkout Integrado</b> (ative Pix e cartão). 2️⃣ Cole sua InfiniteTag aqui (fica no canto superior do app, sem o $). 3️⃣ Preencha a URL da loja p/ confirmação automática. Status: ${mp.infinitepay?.active ? '<b style="color:var(--ok)">conectado ✅</b>' : '<b>desconectado</b>'}.</p>
     </div>
     <button class="btn big">Salvar pagamentos ✅</button></form>`;
 }
 async function savePayments(e) {
   e.preventDefault(); const f = e.target;
-  const body = { payPix: f.payPix.checked, payCard: f.payCard.checked, payBoleto: f.payBoleto.checked, pixKey: f.pixKey.value.trim(), pixName: f.pixName.value.trim(), pixDiscount: Number(f.pixDiscount.value) || 0, installmentMax: Number(f.installmentMax.value) || 1, mpEnabled: f.mpEnabled.checked, stoneEnabled: f.stoneEnabled.checked, infpayEnabled: f.infpayEnabled.checked };
+  const body = { payPix: f.payPix.checked, payCard: f.payCard.checked, payBoleto: f.payBoleto.checked, payInfinite: f.payInfinite.checked, pixKey: f.pixKey.value.trim(), pixName: f.pixName.value.trim(), pixDiscount: Number(f.pixDiscount.value) || 0, installmentMax: Number(f.installmentMax.value) || 1, mpEnabled: f.mpEnabled.checked, stoneEnabled: f.stoneEnabled.checked, infpayEnabled: f.infpayEnabled.checked, infpayHandle: f.infpayHandle.value.replace(/^\$/, '').trim(), publicUrl: f.publicUrl.value.trim().replace(/\/$/, '') };
   if (f.mpToken.value.trim()) body.mpToken = f.mpToken.value.trim();
   if (f.stoneToken.value.trim()) body.stoneToken = f.stoneToken.value.trim();
-  if (f.infpayToken.value.trim()) body.infpayToken = f.infpayToken.value.trim();
-  if (!body.payPix && !body.payCard && !body.payBoleto) { toast('Ative ao menos 1 método!', 'err'); return; }
+  if (!body.payPix && !body.payCard && !body.payBoleto && !body.payInfinite) { toast('Ative ao menos 1 método!', 'err'); return; }
   CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify(body) });
   toast('Pagamentos salvos! 💳', 'ok'); viewPayments();
 }

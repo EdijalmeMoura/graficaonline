@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pagamento — PrimePrint</title>
+<style>
+*{box-sizing:border-box}body{font-family:'Segoe UI',Arial,sans-serif;background:#0B1E3B;margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.box{background:#fff;border-radius:18px;padding:36px 30px;max-width:440px;width:100%;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.big{font-size:72px;line-height:1}.spin{font-size:72px;animation:pulse 1.2s infinite}
+@keyframes pulse{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.15);opacity:.7}}
+h2{color:#0B1E3B;margin:14px 0 6px}p{color:#555;font-size:15px}
+.btn{display:inline-block;background:#F26522;color:#fff;font-weight:700;border:none;border-radius:10px;padding:13px 22px;font-size:15px;cursor:pointer;text-decoration:none;margin:6px 4px 0}
+.btn.navy{background:#0B1E3B}.btn.ghost{background:#f1f1f1;color:#333}
+.small{font-size:13px;color:#888;margin-top:12px}
+</style></head>
+<body>
+<div class="box" id="box"><div class="spin">♾️</div><h2>Confirmando pagamento...</h2><p>Aguarde um instante.</p></div>
+<script>
+(async () => {
+  const box = document.getElementById('box');
+  const q = new URLSearchParams(location.search);
+  const code = q.get('order_nsu') || '';
+  const receipt = q.get('receipt_url') || '';
+  const btns = (extra) => `${extra || ''}<a class="btn navy" href="/conta.html#/pedidos">Meus pedidos →</a><br><a class="btn ghost" href="/">Voltar à loja</a>`;
+  if (!code) { box.innerHTML = `<div class="big">❓</div><h2>Pedido não identificado</h2><p>Não encontramos a referência do pagamento.</p>${btns()}`; return; }
+  const tok = localStorage.getItem('pp_token');
+  if (!tok) { box.innerHTML = `<div class="big">🔐</div><h2>Entre na sua conta</h2><p>Pedido <b>${code}</b>: faça login para ver a confirmação.</p>${btns(`<a class="btn" href="/login.html?next=/conta.html">Entrar →</a><br>`)}`; return; }
+  const params = new URLSearchParams({ slug: q.get('slug') || '', transaction_nsu: q.get('transaction_nsu') || '', receipt_url: receipt, capture_method: q.get('capture_method') || '' });
+  try {
+    const r = await fetch('/api/orders/code/' + encodeURIComponent(code) + '/payment-check?' + params, { headers: { Authorization: 'Bearer ' + tok } });
+    const data = await r.json();
+    if (data.paid) {
+      box.innerHTML = `<div class="big">🎉</div><h2>Pagamento confirmado!</h2><p>Pedido <b>${code}</b> pago. Já vamos preparar tudo! 🚀</p>${btns(receipt ? `<a class="btn" href="${receipt}" target="_blank">Ver comprovante 🧾</a><br>` : '')}`;
+    } else {
+      box.innerHTML = `<div class="big">⏳</div><h2>Pagamento em processamento</h2><p>Pedido <b>${code}</b>: ainda não identificamos a confirmação. Se você já pagou, aguarde um pouco.</p>${btns(`<button class="btn" onclick="location.reload()">Verificar novamente 🔄</button><br>`)}`;
+    }
+  } catch {
+    box.innerHTML = `<div class="big">⏳</div><h2>Não foi possível confirmar agora</h2><p>Pedido <b>${code}</b>: verifique em "Meus pedidos" daqui a pouco.</p>${btns(`<button class="btn" onclick="location.reload()">Tentar de novo 🔄</button><br>`)}`;
+  }
+})();
+</script>
+</body></html>

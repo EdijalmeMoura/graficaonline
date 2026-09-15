@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=24"></head>
+<title>Finalizar compra — PrimePrint</title><link rel="stylesheet" href="/css/style.css?v=25"></head>
 <body data-page="checkout">
 <div id="site-header"></div>
 <div class="wrap">
@@ -23,7 +23,7 @@
         <div class="pills" id="ck-ship-pills"></div>
         <div id="ck-pickup" style="display:none;margin-top:10px;background:#F0FDF4;border:1.5px solid #16A34A;border-radius:10px;padding:12px">🏪 <b>Retirada na loja — GRÁTIS</b><br><span class="small">Sem frete e sem endereço de entrega. Avisamos quando seu pedido estiver pronto! 🎉</span></div></div>
       <div class="card"><h3>💳 Pagamento</h3>
-        <div class="paym" id="ck-paym"></div></div>
+        <div class="paym" id="ck-paym"></div><div id="ck-cardform"></div></div>
       <div class="card"><h3>🎨 Arte do pedido <span class="small mut">(opcional agora)</span></h3>
         <p class="small mut" style="margin:0 0 10px">PDF, JPG, PNG, AI, PSD, CDR — até 60MB. Pode enviar depois, na sua conta.</p>
         <input type="file" id="ck-art-input" hidden onchange="ckArt(this)">
@@ -33,9 +33,9 @@
       <div class="coupon"><input class="inp" id="ck-coupon" placeholder="Cupom (ex: BEMVINDO10)"><button class="btn navy" onclick="ckApplyCoupon()">OK</button></div>
       <div id="ck-totals" style="margin-top:14px"></div>
       <button class="btn big block" id="ck-btn" style="margin-top:14px" onclick="ckFinish()">Confirmar pedido ✅</button>
-      <p class="small mut" style="text-align:center">🔒 Pagamento 100% seguro (demonstração)</p></div></div>
+      <p class="small mut" style="text-align:center">🔒 Pagamento 100% seguro</p></div></div>
   </div>
 </div>
 <div id="site-footer"></div>
-<script src="/js/app.js?v=24"></script><script src="/js/shop.js?v=24"></script>
+<script src="/js/app.js?v=25"></script><script src="/js/shop.js?v=25"></script>
 </body></html>

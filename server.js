@@ -433,7 +433,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', monthlyGoal: 30000,
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', monthlyGoal: 30000,
   };
 
   const templates = [
@@ -667,7 +667,7 @@ app.get('/api/admin/shipping', auth, admin, (req, res) => {
 });
 app.post('/api/orders', auth, async (req, res) => {
   const db = loadDB();
-  let { items = [], address, shippingType = 'PAC', shippingLabel = null, paymentMethod = 'pix', coupon = null, art = null, pointsUsed = 0 } = req.body;
+  let { items = [], address, shippingType = 'PAC', shippingLabel = null, paymentMethod = 'pix', coupon = null, art = null, pointsUsed = 0, card = null, installments = 1 } = req.body;
   if (shippingType === 'Retirada' && (!address || !address.street)) address = { label: 'Retirada na loja', street: 'Retirada na loja', district: '', city: '', state: '', zip: '' };
   if (!items.length) return res.status(400).json({ error: 'Carrinho vazio' });
   if (!address || !address.street) return res.status(400).json({ error: 'Informe o endereço de entrega' });
@@ -715,11 +715,28 @@ app.post('/api/orders', auth, async (req, res) => {
     buyer.points -= pointsUsedFinal;
   }
   const total = Math.round((subtotal - discount - pointsDiscount + shipping) * 100) / 100;
+  // Gateway real: Stone cobra o cartão ANTES de gravar (se recusar, desfaz pontos/cupom/vendas)
+  let payStatus = paymentMethod === 'card' ? 'paid' : 'pending';
+  let payExtra = {}, paymentUrl = null, paymentError = null;
+  if (paymentMethod === 'card' && stoneActive()) {
+    if (!card || !card.number || !card.holder || !card.expMonth || !card.expYear || !card.cvv) return res.status(400).json({ error: 'Dados do cartão incompletos' });
+    try {
+      const ch = await stoneCharge({ amount: Math.round(total * 100), card: { number: String(card.number).replace(/\D/g, ''), holder: String(card.holder).slice(0, 64), expMonth: card.expMonth, expYear: card.expYear, cvv: String(card.cvv).replace(/\D/g, '') }, installments: Number(installments) || 1, customer: { name: buyer.name, email: buyer.email, phone: String((buyer && buyer.phone) || '').replace(/\D/g, '') }, orderCode: `PP-2026-${db.seq.order}` });
+      payExtra = { gateway: 'stone', gatewayId: ch.gatewayId, chargeId: ch.chargeId, installments: Number(installments) || 1, brand: ch.brand, authCode: ch.authCode };
+      payStatus = ch.status === 'paid' ? 'paid' : 'pending';
+    } catch (e) {
+      const cc = couponCode ? db.coupons.find(x => x.code === couponCode) : null;
+      if (cc) cc.used = Math.max(0, cc.used - 1);
+      if (buyer && pointsUsedFinal) buyer.points += pointsUsedFinal;
+      normItems.forEach(it => { const pr = db.products.find(x => x.id === it.productId); if (pr) pr.sold = Math.max(0, pr.sold - 1); });
+      return res.status(e.status || 500).json({ error: e.message || 'Falha na cobrança' });
+    }
+  }
   const n = db.seq.order++;
   const order = {
     id: uid('o-'), code: `PP-2026-${n}`, userId: req.user.id, items: normItems,
     subtotal, discount, coupon: couponCode, shipping, total, pointsUsed: pointsUsedFinal, pointsDiscount,
-    payment: { method: paymentMethod, status: paymentMethod === 'boleto' ? 'pending' : 'paid' },
+    payment: { method: paymentMethod, status: payStatus, ...payExtra },
     address, shippingType: shipLabel, status: art && art.url ? 'em_analise' : 'aguardando_arte', tracking: '',
     art: art && art.url ? { file: art.url, originalName: art.name || '', status: 'in_review', feedback: '' } : { file: null, originalName: '', status: 'pending', feedback: '' },
     timeline: [{ status: art && art.url ? 'em_analise' : 'aguardando_arte', at: new Date().toISOString() }],
@@ -727,7 +744,14 @@ app.post('/api/orders', auth, async (req, res) => {
   };
   if (art && art.url) order.timeline.unshift({ status: 'aguardando_arte', at: new Date().toISOString() });
   db.orders.push(order); saveDB();
-  res.json(order);
+  if (paymentMethod === 'infinitepay') {
+    if (!infpayActive()) paymentError = 'InfinitePay não configurada';
+    else try {
+      paymentUrl = await infpayCreateLink(order, buyer || req.user);
+      order.payment.gateway = 'infinitepay'; order.payment.linkUrl = paymentUrl; saveDB();
+    } catch (e) { paymentError = e.message || 'Falha ao gerar link'; }
+  }
+  res.json((paymentUrl || paymentError) ? { ...order, paymentUrl, paymentError } : order);
 });
 app.put('/api/orders/:id/art', auth, (req, res) => {
   const o = loadDB().orders.find(x => x.id === req.params.id);
@@ -925,7 +949,7 @@ app.put('/api/admin/messages/:id', auth, admin, (req, res) => {
 const mpToken = () => loadDB().config.mpToken || process.env.MP_ACCESS_TOKEN || '';
 const stoneToken = () => loadDB().config.stoneToken || process.env.STONE_ACCESS_TOKEN || '';
 const infpayToken = () => loadDB().config.infpayToken || process.env.INFINITEPAY_ACCESS_TOKEN || '';
-app.get('/api/pay/status', (req, res) => { const c = loadDB().config; const tk = mpToken(); const st = stoneToken(); const ip = infpayToken(); res.json({ mercadopago: !!tk && (c.mpEnabled || !!process.env.MP_ACCESS_TOKEN), hasToken: !!tk, stone: { active: !!st && (c.stoneEnabled || !!process.env.STONE_ACCESS_TOKEN), hasToken: !!st }, infinitepay: { active: !!ip && (c.infpayEnabled || !!process.env.INFINITEPAY_ACCESS_TOKEN), hasToken: !!ip } }); });
+app.get('/api/pay/status', (req, res) => { const c = loadDB().config; const tk = mpToken(); const st = stoneToken(); const iph = c.infpayHandle || process.env.INFINITEPAY_HANDLE || ''; res.json({ mercadopago: !!tk && (c.mpEnabled || !!process.env.MP_ACCESS_TOKEN), hasToken: !!tk, stone: { active: !!st && (c.stoneEnabled || !!process.env.STONE_SECRET_KEY || !!process.env.STONE_ACCESS_TOKEN), hasToken: !!st }, infinitepay: { active: !!iph && (c.infpayEnabled || !!process.env.INFINITEPAY_HANDLE), hasHandle: !!iph } }); });
 app.post('/api/pay/mp-preference', auth, async (req, res) => {
   const tk = mpToken();
   if (!tk) return res.status(400).json({ error: 'not-configured' });
@@ -970,6 +994,119 @@ app.post('/api/pay/mp-webhook', async (req, res) => {
     }
   } catch (e) { console.error('webhook MP:', e.message); }
   res.sendStatus(200);
+});
+
+/* ============================================================
+   PAGAMENTO REAL — Stone (Pagar.me v5, cartão transparente)
+   + InfinitePay (Checkout Integrado: link Pix/cartão)
+   Chaves: admin → Pagamentos, ou env STONE_SECRET_KEY /
+   INFINITEPAY_HANDLE / PUBLIC_URL. Sem chave = simulação.
+   ============================================================ */
+const stoneKey = () => loadDB().config.stoneToken || process.env.STONE_SECRET_KEY || process.env.STONE_ACCESS_TOKEN || '';
+const stoneActive = () => { const c = loadDB().config; return !!stoneKey() && (c.stoneEnabled || !!process.env.STONE_SECRET_KEY || !!process.env.STONE_ACCESS_TOKEN); };
+const infpayHandle = () => (loadDB().config.infpayHandle || process.env.INFINITEPAY_HANDLE || '').replace(/^\$/, '').trim();
+const infpayActive = () => { const c = loadDB().config; return !!infpayHandle() && (c.infpayEnabled || !!process.env.INFINITEPAY_HANDLE); };
+const publicBase = () => (loadDB().config.publicUrl || process.env.PUBLIC_URL || '').replace(/\/$/, '');
+async function stoneCharge({ amount, card, installments, customer, orderCode }) {
+  const r = await fetch('https://api.pagar.me/core/v5/orders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Basic ' + Buffer.from(stoneKey() + ':').toString('base64') },
+    body: JSON.stringify({
+      code: orderCode,
+      customer: { name: customer.name, email: customer.email, type: 'individual', phones: customer.phone && customer.phone.length >= 10 ? { mobile_phone: { country_code: '55', area_code: customer.phone.slice(0, 2), number: customer.phone.slice(2, 12) } } : undefined },
+      items: [{ code: orderCode, description: ('Pedido ' + orderCode + ' PrimePrint').slice(0, 64), quantity: 1, amount }],
+      payments: [{ payment_method: 'credit_card', amount, credit_card: { installments: Math.max(1, Math.min(21, installments || 1)), statement_descriptor: 'PRIMEPRINT', card: { number: card.number, holder_name: card.holder, exp_month: Number(card.expMonth), exp_year: Number(card.expYear), cvv: card.cvv } } }],
+    }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const msg = data?.message || (Array.isArray(data?.errors) && data.errors.map(e => e.message).join('; ')) || 'Pagamento recusado';
+    const err = new Error(msg); err.status = 402; throw err;
+  }
+  const ch = data.charges?.[0] || {};
+  return { gatewayId: data.id, chargeId: ch.id || null, status: data.status || ch.status || 'pending', brand: ch.last_transaction?.card?.brand || null, authCode: ch.last_transaction?.authorization_code || null };
+}
+async function infpayCreateLink(order, customer) {
+  const items = order.items.map(i => ({ quantity: 1, price: Math.round(i.total * 100), description: `${i.name} (${Number(i.qty).toLocaleString('pt-BR')} un)`.slice(0, 120) }));
+  if (order.shipping) items.push({ quantity: 1, price: Math.round(order.shipping * 100), description: `Frete (${order.shippingType})`.slice(0, 120) });
+  if (order.discount) items.push({ quantity: 1, price: -Math.round(order.discount * 100), description: 'Desconto' });
+  const base = publicBase();
+  const r = await fetch('https://api.checkout.infinitepay.io/links', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      handle: infpayHandle(), order_nsu: order.code,
+      redirect_url: (base || 'https://primeprint.example.com') + '/pagamento.html?order_nsu=' + encodeURIComponent(order.code),
+      ...(base ? { webhook_url: base + '/api/webhooks/infinitepay' } : {}),
+      customer: { name: customer.name, email: customer.email },
+      items,
+    }),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.url) throw new Error(data?.message || 'Falha ao gerar link InfinitePay');
+  return data.url;
+}
+async function infpayCheck(order, extra = {}) {
+  const payload = { handle: infpayHandle(), order_nsu: order.code };
+  const tnsu = extra.transaction_nsu || order.payment?.transactionNsu;
+  const slug = extra.slug || order.payment?.slug;
+  if (tnsu) payload.transaction_nsu = tnsu;
+  if (slug) payload.slug = slug;
+  const r = await fetch('https://api.checkout.infinitepay.io/payment_check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const data = await r.json().catch(() => ({}));
+  if (data?.paid) {
+    order.payment.status = 'paid';
+    if (data.capture_method) order.payment.captureMethod = data.capture_method;
+    if (data.paid_amount) order.payment.paidAmount = data.paid_amount / 100;
+    order.timeline.push({ status: order.status, at: new Date().toISOString(), note: 'Pagamento aprovado (InfinitePay' + (data.capture_method ? ' ' + data.capture_method : '') + ')' });
+    saveDB();
+    return { paid: true };
+  }
+  return { paid: false };
+}
+app.post('/api/orders/:id/pay-link', auth, async (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (req.user.role !== 'admin' && o.userId !== req.user.id) return res.status(403).json({ error: 'Sem acesso' });
+  if (o.payment.method !== 'infinitepay') return res.status(400).json({ error: 'Pedido não é InfinitePay' });
+  if (o.payment.status === 'paid') return res.status(400).json({ error: 'Pedido já pago' });
+  if (!infpayActive()) return res.status(400).json({ error: 'InfinitePay não configurada' });
+  try { const url = await infpayCreateLink(o, req.user); o.payment.linkUrl = url; saveDB(); res.json({ paymentUrl: url }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.get('/api/orders/code/:code/payment-check', auth, async (req, res) => {
+  const o = loadDB().orders.find(x => x.code === req.params.code);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (req.user.role !== 'admin' && o.userId !== req.user.id) return res.status(403).json({ error: 'Sem acesso' });
+  if (o.payment.method !== 'infinitepay' || o.payment.status === 'paid') return res.json({ paid: o.payment.status === 'paid' });
+  if (req.query.slug) o.payment.slug = String(req.query.slug).slice(0, 80);
+  if (req.query.transaction_nsu) o.payment.transactionNsu = String(req.query.transaction_nsu).slice(0, 80);
+  if (req.query.receipt_url) o.payment.receiptUrl = String(req.query.receipt_url).slice(0, 300);
+  if (req.query.capture_method) o.payment.captureMethod = String(req.query.capture_method).slice(0, 20);
+  saveDB();
+  try { res.json(await infpayCheck(o, req.query)); }
+  catch { res.json({ paid: false, error: 'Não foi possível confirmar agora' }); }
+});
+app.post('/api/webhooks/infinitepay', async (req, res) => {
+  try {
+    const b = req.body || {};
+    const o = b.order_nsu ? loadDB().orders.find(x => x.code === b.order_nsu) : null;
+    if (!o) return res.status(400).json({ success: false });
+    if (b.transaction_nsu) o.payment.transactionNsu = b.transaction_nsu;
+    if (b.invoice_slug) o.payment.slug = b.invoice_slug;
+    if (b.receipt_url) o.payment.receiptUrl = b.receipt_url;
+    if (b.capture_method) o.payment.captureMethod = b.capture_method;
+    saveDB();
+    try { await infpayCheck(o, { transaction_nsu: b.transaction_nsu, slug: b.invoice_slug }); } catch {}
+    res.json({ success: true, message: null });
+  } catch { res.status(400).json({ success: false }); }
+});
+app.post('/api/orders/:id/notify-payment', auth, (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (req.user.role !== 'admin' && o.userId !== req.user.id) return res.status(403).json({ error: 'Sem acesso' });
+  o.payment.notified = true;
+  o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Cliente avisou que pagou (' + o.payment.method + ')' });
+  saveDB(); res.json({ ok: true });
 });
 
 /* ---------------- Estáticos ---------------- */

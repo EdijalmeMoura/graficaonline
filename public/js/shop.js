@@ -249,6 +249,7 @@ async function pageCheckout() {
   const me = await api('/api/auth/me');
   Auth.set({ token: Auth.token, user: me });
   renderCkAddresses(me.addresses || []);
+  try { CK._payStatus = await api('/api/pay/status'); } catch { CK._payStatus = {}; }
   renderCkPay();
   renderCkShip(); ckQuote();
   $('#ck-items').innerHTML = Cart.items.map(i => `<div class="mini"><div class="t" style="background:linear-gradient(135deg,${i.grad?.[0] || '#0B1E3B'},${i.grad?.[1] || '#1E5AA8'})">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.configLabel || '')}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('');
@@ -280,13 +281,31 @@ async function ckApplyCoupon() {
   } catch (e) { toast(e.message, 'err'); }
 }
 function renderCkPay() {
-  const defs = [['pix', 'payPix', 'Pix', '<small>' + (CONFIG.pixDiscount || 5) + '% OFF'], ['card', 'payCard', 'Cartão', '<small>até ' + (CONFIG.installmentMax || 6) + 'x'], ['boleto', 'payBoleto', 'Boleto', '<small>1-2 dias']];
-  const icons = { pix: '⚡', card: '💳', boleto: '🧾' };
+  const stone = CK._payStatus?.stone?.active;
+  const defs = [['pix', 'payPix', 'Pix', '<small>' + (CONFIG.pixDiscount || 5) + '% OFF'], ['card', 'payCard', 'Cartão', stone ? '<small>via Stone' : '<small>até ' + (CONFIG.installmentMax || 6) + 'x'], ['boleto', 'payBoleto', 'Boleto', '<small>1-2 dias']];
+  if (CK._payStatus?.infinitepay?.active && CONFIG.payInfinite !== false) defs.push(['infinitepay', 'payInfinite', 'InfinitePay', '<small>Pix ou cartão']);
+  const icons = { pix: '⚡', card: '💳', boleto: '🧾', infinitepay: '♾️' };
   const avail = defs.filter(d => CONFIG[d[1]] !== false);
   if (!avail.length) avail.push(defs[0]);
   if (!avail.find(d => d[0] === CK.pay)) CK.pay = avail[0][0];
   const box = document.querySelector('#ck-paym');
   if (box) box.innerHTML = avail.map(d => `<button data-pay="${d[0]}" class="${CK.pay === d[0] ? 'on' : ''}" onclick="ckSetPay('${d[0]}')">${icons[d[0]]} ${d[2]}${d[3]}</small></button>`).join('');
+  renderCardForm();
+}
+function renderCardForm() {
+  const box = document.querySelector('#ck-cardform');
+  if (!box) return;
+  if (CK.pay !== 'card' || !CK._payStatus?.stone?.active) { box.innerHTML = ''; return; }
+  const max = CONFIG.installmentMax || 6;
+  let opts = '';
+  for (let i = 1; i <= max; i++) opts += `<option value="${i}">${i}x sem juros</option>`;
+  box.innerHTML = `<div style="margin-top:12px;border:1.5px solid var(--line);border-radius:10px;padding:12px;background:#F8FAFF">
+    <b class="small">💳 Dados do cartão <span class="mut">(cobrança segura via Stone)</span></b>
+    <div style="margin-top:8px"><label class="lbl">Número do cartão</label><input class="inp mono" id="cc-num" inputmode="numeric" placeholder="0000 0000 0000 0000" maxlength="19"></div>
+    <div style="margin-top:8px"><label class="lbl">Nome impresso no cartão</label><input class="inp" id="cc-holder" placeholder="Como está no cartão"></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Validade (MM/AA)</label><input class="inp mono" id="cc-exp" placeholder="MM/AA" maxlength="5"></div>
+    <div><label class="lbl">CVV</label><input class="inp mono" id="cc-cvv" inputmode="numeric" placeholder="123" maxlength="4"></div></div>
+    <div style="margin-top:8px;max-width:220px"><label class="lbl">Parcelas</label><select class="inp" id="cc-inst">${opts}</select></div></div>`;
 }
 function ckSetShip(v) {
   CK.shipType = v;
@@ -323,7 +342,7 @@ async function ckQuote() {
     renderCkShip(); ckTotals();
   } catch { }
 }
-function ckSetPay(v) { CK.pay = v; $$('.paym button').forEach(b => b.classList.toggle('on', b.dataset.pay === v)); ckTotals(); }
+function ckSetPay(v) { CK.pay = v; $$('.paym button').forEach(b => b.classList.toggle('on', b.dataset.pay === v)); renderCardForm(); ckTotals(); }
 async function ckArt(input) {
   const f = input.files[0]; if (!f) return;
   const btn = document.querySelector('#ck-art-btn');
@@ -371,14 +390,22 @@ async function ckFinish() {
   const addr = pickup ? { label: 'Retirada na loja', street: 'Retirada na loja', district: '', city: '', state: '', zip: '' } : window._addrs.find(a => a.id === CK.addressId);
   const btn = $('#ck-btn'); btn.disabled = true; btn.textContent = 'Processando pagamento... ⏳';
   try {
-    const order = await api('/api/orders', {
-      method: 'POST',
-      body: JSON.stringify({
-        items: Cart.items.map(i => ({ productId: i.productId, sel: i.sel, configLabel: i.configLabel })),
-        address: addr, shippingType: CK.shipType, shippingLabel: CK.shipLabel || CK.shipType, paymentMethod: CK.pay, pointsUsed: CK.pointsUsed || 0,
-        coupon: CK.coupon?.code || null, art: CK.art ? { url: CK.art.url, name: CK.art.name } : null,
-      })
-    });
+    const payload = {
+      items: Cart.items.map(i => ({ productId: i.productId, sel: i.sel, configLabel: i.configLabel })),
+      address: addr, shippingType: CK.shipType, shippingLabel: CK.shipLabel || CK.shipType, paymentMethod: CK.pay, pointsUsed: CK.pointsUsed || 0,
+      coupon: CK.coupon?.code || null, art: CK.art ? { url: CK.art.url, name: CK.art.name } : null,
+    };
+    if (CK.pay === 'card' && CK._payStatus?.stone?.active) {
+      const exp = ($('#cc-exp').value || '').split('/');
+      payload.card = { number: $('#cc-num').value, holder: $('#cc-holder').value.trim(), expMonth: (exp[0] || '').trim(), expYear: (exp[1] || '').trim(), cvv: $('#cc-cvv').value };
+      payload.installments = Number($('#cc-inst').value) || 1;
+      if (payload.card.number.replace(/\D/g, '').length < 13 || !payload.card.holder || !/^\d{2}$/.test(payload.card.expMonth) || !/^\d{2,4}$/.test(payload.card.expYear) || payload.card.cvv.replace(/\D/g, '').length < 3) {
+        toast('Confira os dados do cartão 💳', 'err'); btn.disabled = false; btn.textContent = 'Confirmar pedido ✅'; return;
+      }
+    }
+    const order = await api('/api/orders', { method: 'POST', body: JSON.stringify(payload) });
+    if (order.paymentUrl) { Cart.clear(); toast('Pedido criado! Abrindo pagamento seguro... ♾️'); location.href = order.paymentUrl; return; }
+    if (order.paymentError) { Cart.clear(); toast('Pedido ' + order.code + ' criado, mas: ' + order.paymentError, 'err'); location.href = '/conta.html#/pedidos'; return; }
     Cart.clear();
     try {
       const ps = await api('/api/pay/status');
@@ -390,12 +417,16 @@ async function ckFinish() {
       }
     } catch (e) { console.warn('MP indisponível, usando simulação:', e.message); }
     if (CK.pay === 'pix') openModal(`<div style="text-align:center;padding:10px"><h2>⚡ Pague no Pix</h2><p>Pedido <b>${order.code}</b> criado! Total: <b>${BRL(order.total)}</b></p>
-      <div style="font-size:90px">📱</div><p class="mono" style="background:var(--bg);padding:10px;border-radius:8px;font-size:12px">${CONFIG.pixKey ? esc(CONFIG.pixKey) : '00020126580014BR.GOV.BCB.PIX...' + order.code}</p>
-      <p class="small mut">${CONFIG.pixKey ? 'Após pagar, acompanhe aqui — confirmamos rapidinho 😉' : '(Demonstração — pagamento aprovado automaticamente ✅)'}</p>
+      ${CONFIG.pixKey ? `<div style="font-size:70px">📱</div><p class="small mut">Chave Pix (${esc(CONFIG.pixName || 'PrimePrint')}):</p><p class="mono" id="pixkey" style="background:var(--bg);padding:10px;border-radius:8px;font-size:13px;word-break:break-all">${esc(CONFIG.pixKey)}</p><button class="btn navy" onclick="navigator.clipboard?.writeText(document.querySelector('#pixkey').textContent);toast('Chave copiada!','ok')">📋 Copiar chave</button> <button class="btn ok" onclick="notifyPaid('${order.id}')">Já paguei ✅</button><p class="small mut" style="margin-top:8px">Após pagar, toque em "Já paguei" — confirmamos rapidinho 😉</p>` : `<p class="mut">Nossa chave Pix estará disponível em instantes — acompanhe seu pedido 👇</p>`}
       <a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
     else if (CK.pay === 'boleto') openModal(`<div style="text-align:center;padding:10px"><h2>🧾 Boleto gerado</h2><p>Pedido <b>${order.code}</b> • Total: <b>${BRL(order.total)}</b></p><div style="font-size:70px;letter-spacing:2px">||||| |||| |||</div><p class="mono small">34191.79001 01043.510047 91020.150008 9 999900000${String(Math.round(order.total * 100)).padStart(8, '0')}</p><a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
+    else if (order.payment?.gateway === 'stone' && order.payment.status !== 'paid') openModal(`<div style="text-align:center;padding:10px"><h2>💳 Pagamento em análise</h2><p>Pedido <b>${order.code}</b> • Total: <b>${BRL(order.total)}</b></p><p class="mut">A operadora está analisando seu cartão. Assim que aprovar, liberamos a produção automaticamente 😉</p><a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
     else { toast('Pagamento aprovado! 🎉', 'ok'); location.href = '/conta.html#/pedidos'; }
   } catch (e) { toast(e.message, 'err'); btn.disabled = false; btn.textContent = 'Confirmar pedido ✅'; }
+}
+async function notifyPaid(orderId) {
+  try { await api(`/api/orders/${orderId}/notify-payment`, { method: 'POST' }); toast('Valeu! Vamos confirmar e liberar seu pedido 🙏', 'ok'); location.href = '/conta.html#/pedidos'; }
+  catch (e) { toast(e.message, 'err'); }
 }
 
 /* ---------- AUTH ---------- */
@@ -435,7 +466,7 @@ function pageDoc() {
     'como-funciona': `<h1>Como funciona 🛒</h1><p>Comprar na nossa gráfica é moleza:</p><ol><li><b>Escolha o produto</b> e configure formato, papel, quantidade e prazo — o preço atualiza na hora.</li><li><b>Finalize o pedido</b> com Pix, cartão ou boleto.</li><li><b>Envie sua arte</b> no checkout ou depois, na sua conta. Não tem arte? Nosso time cria pra você.</li><li><b>Acompanhe tudo</b> pela timeline do pedido: análise → produção → envio → entrega. 🚚</li></ol><h2>Prazos</h2><p>Produção normal em até 5 dias úteis + prazo do frete. Precisou pra ontem? Ative a <b>produção expressa</b> no configurador. ⚡</p>`,
     'gabaritos': `<h1>Gabaritos 📐</h1><p>Baixe o gabarito do seu produto e monte a arte no tamanho certo, com sangria e margem de segurança. Formatos PDF e AI.</p><div class="gab-grid" id="gab-grid"></div><h2>Dicas rápidas</h2><ul><li>Use modo de cor <b>CMYK</b> e resolução <b>300 DPI</b>.</li><li>Converta textos em curvas.</li><li>Respeite 3mm de sangria em cada lado.</li></ul>`,
     'criacao-e-envio': `<h1>Criação e envio de arquivos 🎨</h1><h2>Formatos aceitos</h2><p>PDF, JPG, PNG, AI, PSD, CDR, TIFF e EPS — até 60MB por arquivo.</p><h2>Não tem arte?</h2><p>Nosso estúdio cria sua arte a partir de <b>R$ 49</b>. Chame no WhatsApp <b>${esc(CONFIG.phone || '')}</b> 💬</p><h2>Checklist antes de enviar</h2><ul><li>✅ CMYK + 300 DPI</li><li>✅ Textos em curvas</li><li>✅ Sangria de 3mm</li><li>✅ Confira telefone, endereço e preços!</li></ul>`,
-    'duvidas': `<h1>Dúvidas frequentes ❓</h1><div class="faq"><details open><summary>Qual o prazo de entrega?</summary><div class="a">Produção de até 5 dias úteis (normal) ou 2 dias (expressa) + prazo do frete escolhido no checkout.</div></details><details><summary>Posso enviar a arte depois?</summary><div class="a">Sim! Você envia no checkout ou quando quiser, na área “Meus pedidos”.</div></details><details><summary>Vocês conferem minha arte?</summary><div class="a">Sim, toda arte passa por análise gratuita. Se algo estiver errado, avisamos antes de imprimir.</div></details><details><summary>Quais as formas de pagamento?</summary><div class="a">Pix (com ${CONFIG.pixDiscount || 5}% OFF), cartão em até ${CONFIG.installmentMax || 6}x e boleto.</div></details><details><summary>E se chegar com defeito?</summary><div class="a">Reimprimimos ou devolvemos seu dinheiro. Simples assim. 🛡️</div></details></div>`,
+    'duvidas': `<h1>Dúvidas frequentes ❓</h1><div class="faq"><details open><summary>Qual o prazo de entrega?</summary><div class="a">Produção de até 5 dias úteis (normal) ou 2 dias (expressa) + prazo do frete escolhido no checkout.</div></details><details><summary>Posso enviar a arte depois?</summary><div class="a">Sim! Você envia no checkout ou quando quiser, na área “Meus pedidos”.</div></details><details><summary>Vocês conferem minha arte?</summary><div class="a">Sim, toda arte passa por análise gratuita. Se algo estiver errado, avisamos antes de imprimir.</div></details><details><summary>Quais as formas de pagamento?</summary><div class="a">Pix (com ${CONFIG.pixDiscount || 5}% OFF), cartão em até ${CONFIG.installmentMax || 6}x, boleto ou InfinitePay (Pix/cartão).</div></details><details><summary>E se chegar com defeito?</summary><div class="a">Reimprimimos ou devolvemos seu dinheiro. Simples assim. 🛡️</div></details></div>`,
     'contato': `<h1>Fale conosco 💬</h1><p>📞 <b>${esc(CONFIG.phone || '')}</b> • ✉️ <b>${esc(CONFIG.email || '')}</b><br>🕘 ${esc(CONFIG.hours || '')}</p><form onsubmit="sendContact(event)"><div class="row2"><div><label class="lbl">Nome</label><input class="inp" name="name" required></div><div><label class="lbl">E-mail</label><input class="inp" name="email" type="email" required></div></div><div style="margin-top:10px"><div style="margin-top:10px"><label class="lbl">WhatsApp (com DDD)</label><input class="inp" name="whatsapp" placeholder="(81) 99999-9999"></div><div style="margin-top:10px"><label class="lbl">Assunto</label><input class="inp" name="subject"></div><div style="margin-top:10px"><label class="lbl">Mensagem</label><textarea class="inp" name="message" rows="5" required></textarea></div><button class="btn" style="margin-top:12px">Enviar mensagem ✉️</button></form>`,
     'politicas': `<h1>Nossas políticas 📜</h1><h2>Privacidade (LGPD)</h2><p>Seus dados são usados apenas para processar pedidos e melhorar sua experiência. Nunca vendemos informações. Você pode pedir exclusão quando quiser.</p><h2>Qualidade</h2><p>Todo pedido passa por prova digital e controle de qualidade. Defeito de impressão = reimpressão ou reembolso.</p><h2>Entrega</h2><p>Enviamos via PAC/SEDEX para todo o Brasil ou retire grátis na loja. Frete grátis em compras acima de <b>${BRL(CONFIG.freeShipFrom || 299)}</b>. Atrasos da transportadora geram acompanhamento dedicado.</p><h2>Trocas e devoluções</h2><p>Produtos personalizados seguem arte aprovada. Erro nosso? Reimpressão imediata. Erro na arte enviada pelo cliente? Reimprimimos com 30% de desconto. 🤝</p>`,
   };

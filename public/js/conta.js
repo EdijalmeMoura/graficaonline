@@ -110,7 +110,7 @@ function filterOrders(s) {
   $('#orders-box').innerHTML = list.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Pedido</th><th>Data</th><th>Itens</th><th>Pagamento</th><th>Total</th><th>Status</th><th></th></tr>
     ${list.map(o => `<tr><td><b>${o.code}</b>${o.tracking ? `<br><span class="small mono">${esc(o.tracking)}</span>` : ''}</td><td>${fmtDate(o.createdAt)}</td>
     <td>${o.items.map(i => `${i.icon} ${esc(i.name)} <span class="mut">(${i.qty.toLocaleString('pt-BR')} un)</span>`).join('<br>')}</td>
-    <td>${o.payment.method === 'pix' ? '⚡ Pix' : o.payment.method === 'card' ? '💳 Cartão' : '🧾 Boleto'} <span class="st st-${o.payment.status}">${o.payment.status === 'paid' ? 'pago' : 'pendente'}</span></td>
+    <td>${o.payment.method === 'pix' ? '⚡ Pix' : o.payment.method === 'card' ? '💳 Cartão' : o.payment.method === 'infinitepay' ? '♾️ InfinitePay' : '🧾 Boleto'} <span class="st st-${o.payment.status}">${o.payment.status === 'paid' ? 'pago' : 'pendente'}</span></td>
     <td><b>${BRL(o.total)}</b></td><td>${stTag(o.status)}</td><td><a class="btn sm navy" href="#/pedido?id=${o.id}">Detalhes</a></td></tr>`).join('')}</table></div>`
     : `<div class="empty"><div class="e">📭</div><p>Nenhum pedido neste filtro.</p></div>`;
 }
@@ -137,10 +137,35 @@ function viewOrderDetail(id) {
           ${['aguardando_arte'].includes(o.status) || o.art?.status === 'rejected' ? `<label class="filebox" style="display:block;margin-top:10px">📤 <b>${o.art?.status === 'rejected' ? 'Reenviar arte corrigida' : 'Enviar arte agora'}</b><br><span class="small mut">PDF, JPG, PNG, AI, PSD, CDR — até 60MB</span><input type="file" hidden onchange="sendArt('${o.id}',this)"></label><div id="art-ok"></div>` : `<p class="small mut">✅ Arte recebida. Nossa equipe analisa antes de imprimir.</p>`}
         </div>
         <div class="panel"><h3>🚚 Entrega e pagamento</h3>
-          <p class="small">📍 ${esc(o.address?.street || '')} • ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} • CEP ${esc(o.address?.zip || '')}<br>🚚 ${o.shippingType} • 💳 ${o.payment.method === 'pix' ? 'Pix' : o.payment.method === 'card' ? 'Cartão' : 'Boleto'} (${o.payment.status === 'paid' ? 'pago ✅' : 'aguardando pagamento ⏳'})</p>
+          <p class="small">📍 ${esc(o.address?.street || '')} • ${esc(o.address?.city || '')}/${esc(o.address?.state || '')} • CEP ${esc(o.address?.zip || '')}<br>🚚 ${o.shippingType} • 💳 ${o.payment.method === 'pix' ? 'Pix' : o.payment.method === 'card' ? 'Cartão' : o.payment.method === 'infinitepay' ? 'InfinitePay' : 'Boleto'} (${o.payment.status === 'paid' ? 'pago ✅' : 'aguardando pagamento ⏳'})</p>
+          ${payActions(o)}
           <button class="btn sm ghost" onclick="toast('Nota fiscal enviada para seu e-mail! 🧾','ok')">🧾 2ª via da NF</button> <button class="btn sm navy" onclick="printReceipt('${o.id}')">Comprovante</button></div>
       </div>
     </div>`;
+}
+function payActions(o) {
+  if (o.payment.status === 'paid' || o.status === 'cancelado') return '';
+  if (o.payment.method === 'infinitepay') return `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin:10px 0">♾️ <b>Pagamento pendente</b> — Pix ou cartão no checkout seguro.<br><br><button class="btn sm" onclick="payNow('${o.id}')">Pagar agora →</button> <button class="btn sm navy" onclick="checkPaid('${o.code}')">Já paguei, verificar 🔄</button></div>`;
+  if (o.payment.method === 'pix' && CONFIG.pixKey) return `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin:10px 0">⚡ <b>Aguardando Pix de ${BRL(o.total)}</b><br><span class="small mut">Chave (${esc(CONFIG.pixName || 'PrimePrint')}):</span> <span class="mono small" id="ct-pixkey">${esc(CONFIG.pixKey)}</span> <button class="btn sm navy" onclick="navigator.clipboard?.writeText(document.querySelector('#ct-pixkey').textContent);toast('Chave copiada!','ok')">Copiar</button><br><br>${o.payment.notified ? '<span class="small">✅ Você já avisou — estamos confirmando!</span>' : `<button class="btn sm ok" onclick="notifyPaidCt('${o.id}')">Já paguei ✅</button>`}</div>`;
+  return '';
+}
+async function payNow(id) {
+  try { toast('Gerando link de pagamento... ♾️'); const r = await api(`/api/orders/${id}/pay-link`, { method: 'POST' }); location.href = r.paymentUrl; }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function checkPaid(code) {
+  try {
+    toast('Verificando pagamento... 🔄');
+    const r = await api(`/api/orders/code/${code}/payment-check`);
+    ORDERS = await api('/api/orders');
+    const o = ORDERS.find(x => x.code === code);
+    if (o) viewOrderDetail(o.id);
+    toast(r.paid ? 'Pagamento confirmado! 🎉' : 'Ainda não identificamos — aguarde um pouco e tente de novo', r.paid ? 'ok' : 'err');
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function notifyPaidCt(id) {
+  try { await api(`/api/orders/${id}/notify-payment`, { method: 'POST' }); toast('Valeu! Vamos confirmar 🙏', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id); }
+  catch (e) { toast(e.message, 'err'); }
 }
 function printReceipt(id) {
   const o = ORDERS.find(x => x.id === id);
