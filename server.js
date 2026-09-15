@@ -434,7 +434,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', monthlyGoal: 30000, mailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', smtpFrom: '',
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', meSandbox: false, meName: '', mePhone: '', meEmail: '', meDoc: '', meStreet: '', meNumber: '', meDistrict: '', meCity: '', meState: '', meIE: '', monthlyGoal: 30000, mailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', smtpFrom: '',
   };
 
   const templates = [
@@ -633,7 +633,7 @@ app.get('/api/orders', auth, (req, res) => {
   if (q) { const s = q.toLowerCase(); list = list.filter(o => (o.code + ' ' + o.items.map(i => i.name).join(' ')).toLowerCase().includes(s)); }
   list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   if (req.user.role === 'admin') {
-    list = list.map(o => ({ ...o, customer: (() => { const u = db.users.find(x => x.id === o.userId); return u ? { name: u.name, email: u.email, phone: u.phone } : null; })() }));
+    list = list.map(o => ({ ...o, customer: (() => { const u = db.users.find(x => x.id === o.userId); return u ? { name: u.name, email: u.email, phone: u.phone, cpf: u.cpf } : null; })() }));
   }
   res.json(list);
 });
@@ -645,6 +645,19 @@ app.get('/api/orders/:id', auth, (req, res) => {
 });
 /* Frete real via Melhor Envio (com fallback p/ tabela manual) */
 const meBRL = n => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
+const meApiBase = () => loadDB().config.meSandbox ? 'https://sandbox.melhorenvio.com.br/api/v2' : 'https://melhorenvio.com.br/api/v2';
+const meApiToken = () => loadDB().config.meToken || process.env.ME_TOKEN || '';
+const meApiActive = () => { const c = loadDB().config; return !!meApiToken() && (c.meEnabled || !!process.env.ME_TOKEN); };
+const meApiHeaders = tk => ({ 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + tk, 'User-Agent': 'PrimePrint (' + (loadDB().config.email || 'contato@primeprint.com.br') + ')' });
+async function meCall(path, tk, body) {
+  const r = await fetch(meApiBase() + path, { method: 'POST', headers: meApiHeaders(tk), body: body === undefined ? undefined : JSON.stringify(body) });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok) {
+    const det = data?.errors ? Object.values(data.errors).flat().join('; ') : '';
+    throw new Error([data?.message, det].filter(Boolean).join(' — ') || ('Erro Melhor Envio (' + r.status + ')'));
+  }
+  return data;
+}
 async function meQuote(toZip, subtotal) {
   const c = loadDB().config;
   const manual = () => ([
@@ -655,14 +668,14 @@ async function meQuote(toZip, subtotal) {
   const tk = c.meToken || process.env.ME_TOKEN || '';
   if (!c.meEnabled || !tk || from.length !== 8 || String(toZip || '').length !== 8) return { live: false, options: manual() };
   try {
-    const r = await fetch('https://www.melhorenvio.com.br/api/v2/me/shipment/calculate', {
+    const r = await fetch(meApiBase() + '/me/shipment/calculate', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: 'Bearer ' + tk },
+      headers: meApiHeaders(tk),
       body: JSON.stringify({ from: { postal_code: from }, to: { postal_code: String(toZip) }, products: [{ id: 'pedido', width: Number(c.pkgWidth) || 20, height: Number(c.pkgHeight) || 10, length: Number(c.pkgLength) || 30, weight: Number(c.pkgWeight) || 1, insurance_value: Number(subtotal) || 0, quantity: 1 }] }),
     });
     const data = await r.json();
     if (!r.ok || !Array.isArray(data)) throw 0;
-    const live = data.filter(s => s && !s.error && Number(s.price) > 0).slice(0, 6).map(s => ({ id: String(s.id), label: `${s.company?.name || 'Correios'} ${s.name || ''} — ${meBRL(s.price)}`.trim(), price: Number(s.price), eta: s.delivery_time ? s.delivery_time + ' dias' : '' }));
+    const live = data.filter(s => s && !s.error && Number(s.price) > 0).slice(0, 6).map(s => ({ id: String(s.id), company: s.company?.name || 'Correios', name: s.name || '', label: `${s.company?.name || 'Correios'} ${s.name || ''} — ${meBRL(s.price)}`.trim(), price: Number(s.price), eta: s.delivery_time ? s.delivery_time + ' dias' : '' }));
     return live.length ? { live: true, options: live } : { live: false, options: manual() };
   } catch { return { live: false, options: manual() }; }
 }
@@ -706,12 +719,13 @@ app.post('/api/orders', auth, async (req, res) => {
     }
   }
   let shipping, shipLabel = shippingLabel || shippingType;
+  let meService = null, meCompany = '';
   if (shippingType === 'Retirada') shipping = 0;
   else if (shippingType === 'PAC' || shippingType === 'SEDEX') shipping = shippingType === 'SEDEX' ? db.config.shipSEDEX : db.config.shipPAC;
   else {
     const q = await meQuote((address.zip || '').replace(/\D/g, ''), subtotal);
     const opt = q.options.find(o => String(o.id) === String(shippingType));
-    if (opt) { shipping = opt.price; shipLabel = opt.label; }
+    if (opt) { shipping = opt.price; shipLabel = opt.label; meService = opt.id; meCompany = opt.company || ''; }
     else shipping = db.config.shipPAC;
   }
   if (freeship || (subtotal - discount) >= db.config.freeShipFrom) shipping = 0;
@@ -746,6 +760,7 @@ app.post('/api/orders', auth, async (req, res) => {
   const order = {
     id: uid('o-'), code: `PP-2026-${n}`, userId: req.user.id, items: normItems,
     subtotal, discount, coupon: couponCode, shipping, total, pointsUsed: pointsUsedFinal, pointsDiscount,
+    meService, meCompany,
     payment: { method: paymentMethod, status: payStatus, ...payExtra },
     address, shippingType: shipLabel, status: art && art.url ? 'em_analise' : 'aguardando_arte', tracking: '',
     art: art && art.url ? { file: art.url, originalName: art.name || '', status: 'in_review', feedback: '' } : { file: null, originalName: '', status: 'pending', feedback: '' },
@@ -807,6 +822,13 @@ app.get('/api/admin/stats', auth, admin, (req, res) => {
     recent: [...db.orders].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)).slice(0, 6),
   });
 });
+function awardDeliveryPoints(o, status) {
+  if (o.pointsAwarded) return;
+  o.pointsAwarded = true;
+  const u = loadDB().users.find(x => x.id === o.userId);
+  const pts = Math.max(0, Math.floor((o.subtotal || 0) - (o.discount || 0)));
+  if (u && pts > 0) { u.points = (u.points || 0) + pts; o.timeline.push({ status: status || o.status, at: new Date().toISOString(), note: '+' + pts + ' pontos fidelidade' }); }
+}
 app.put('/api/orders/:id/status', auth, admin, (req, res) => {
   const o = loadDB().orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
@@ -814,12 +836,7 @@ app.put('/api/orders/:id/status', auth, admin, (req, res) => {
   const _prev = o.status;
   o.status = status;
   if (tracking !== undefined) o.tracking = tracking;
-  if (status === 'entregue' && !o.pointsAwarded) {
-    o.pointsAwarded = true;
-    const u = loadDB().users.find(x => x.id === o.userId);
-    const pts = Math.max(0, Math.floor((o.subtotal || 0) - (o.discount || 0)));
-    if (u && pts > 0) { u.points = (u.points || 0) + pts; o.timeline.push({ status, at: new Date().toISOString(), note: '+' + pts + ' pontos fidelidade' }); }
-  }
+  if (status === 'entregue') awardDeliveryPoints(o, status);
   o.timeline.push({ status, at: new Date().toISOString(), note });
   if (status !== _prev) notifyStatus(o);
   saveDB(); res.json(o);
@@ -1227,6 +1244,114 @@ app.get('/sitemap.xml', (req, res) => {
   const urls = [{ u: '/', p: '1.0' }, { u: '/produtos.html', p: '0.9' }, { u: '/pagina.html?p=gabaritos', p: '0.7' }, { u: '/pagina.html?p=como-funciona', p: '0.5' }, { u: '/pagina.html?p=duvidas', p: '0.5' }, { u: '/pagina.html?p=quem-somos', p: '0.5' }, { u: '/pagina.html?p=criacao-e-envio', p: '0.5' }, { u: '/pagina.html?p=politicas', p: '0.5' }, { u: '/pagina.html?p=contato', p: '0.4' }];
   loadDB().products.filter(p => p.active !== false).forEach(p => urls.push({ u: '/produto.html?id=' + p.id, p: (p.sold || 0) > 100 ? '0.8' : '0.6' }));
   res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(x => `  <url><loc>${base}${x.u.replace(/&/g, '&amp;')}</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>${x.p}</priority></url>`).join('\n')}\n</urlset>`);
+});
+
+/* ============================================================
+   MELHOR ENVIO — compra de etiqueta + rastreio
+   Fluxo: cart → checkout (carteira) → generate → print/tracking
+   ============================================================ */
+const ME_PT = { pending: 'pendente', released: 'liberada', paid: 'paga', generated: 'gerada', posted: 'postada', delivered: 'entregue', canceled: 'cancelada', expired: 'expirada' };
+const meDigits = s => String(s || '').replace(/\D/g, '');
+const parseStreet = s => { const m = String(s || '').match(/^(.*?)[,\s]+(\d+[A-Za-z]?)\s*(.*)$/); if (!m) return { street: String(s || 'Rua').slice(0, 60), number: 'S/N', complement: '' }; return { street: (m[1] || 'Rua').slice(0, 60), number: m[2].slice(0, 10), complement: (m[3] || '').slice(0, 40) }; };
+app.get('/api/orders/:id/me-services', auth, admin, async (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (!meApiActive()) return res.status(400).json({ error: 'Melhor Envio não configurado' });
+  try {
+    const q = await meQuote((o.address?.zip || '').replace(/\D/g, ''), o.subtotal);
+    if (!q.live) return res.status(400).json({ error: 'Sem cotação ao vivo p/ este CEP' });
+    res.json({ options: q.options, current: o.meService || null });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/orders/:id/me-label', auth, admin, async (req, res) => {
+  const db = loadDB();
+  const o = db.orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (!meApiActive()) return res.status(400).json({ error: 'Melhor Envio não configurado' });
+  if (o.me?.orderId && o.me?.status !== 'canceled') return res.status(400).json({ error: 'Etiqueta já gerada (cancele antes de gerar outra)' });
+  const b = req.body || {};
+  if (!b.service) return res.status(400).json({ error: 'Escolha o serviço' });
+  const c = db.config;
+  const miss = [['meName', 'nome'], ['meDoc', 'CPF/CNPJ'], ['mePhone', 'telefone'], ['meStreet', 'rua'], ['meNumber', 'número'], ['meDistrict', 'bairro'], ['meCity', 'cidade'], ['meState', 'UF'], ['shipOriginZip', 'CEP origem']].filter(([k]) => !String(c[k] || '').trim()).map(([, l]) => l);
+  if (miss.length) return res.status(400).json({ error: 'Complete o remetente em Configurações: ' + miss.join(', ') });
+  const u = db.users.find(x => x.id === o.userId) || {};
+  const toDoc = meDigits(b.toDoc || u.cpf);
+  if (toDoc.length < 11) return res.status(400).json({ error: 'Informe o CPF/CNPJ do destinatário' });
+  const addr = parseStreet(o.address?.street);
+  const num = String(b.toNumber || addr.number).slice(0, 10);
+  const fromDoc = meDigits(c.meDoc);
+  const from = { name: c.meName.slice(0, 60), email: (c.meEmail || c.email || 'loja@loja.com').slice(0, 60), phone: meDigits(c.mePhone), address: c.meStreet.slice(0, 60), number: String(c.meNumber).slice(0, 10), complement: '', district: c.meDistrict.slice(0, 40), city: c.meCity.slice(0, 40), state_abbr: String(c.meState).slice(0, 2).toUpperCase(), country_id: 'BR', postal_code: meDigits(c.shipOriginZip) };
+  if (fromDoc.length > 11) { from.company_document = fromDoc; } else { from.document = fromDoc; }
+  from.state_register = b.nfKey ? (c.meIE || '') : 'ISENTO';
+  const to = { name: String(u.name || 'Cliente').slice(0, 60), email: String(u.email || 'cliente@cliente.com').slice(0, 60), phone: meDigits(b.toPhone || u.phone) || meDigits(c.mePhone), address: addr.street, number: num, complement: String(b.toComplement || addr.complement).slice(0, 40), district: String(o.address?.district || 'Centro').slice(0, 40), city: String(o.address?.city || '').slice(0, 40), state_abbr: String(o.address?.state || '').slice(0, 2).toUpperCase(), country_id: 'BR', postal_code: meDigits(o.address?.zip) };
+  if (toDoc.length > 11) { to.company_document = toDoc; } else { to.document = toDoc; }
+  to.state_register = 'ISENTO';
+  const base = publicBase();
+  const payload = {
+    service: Number(b.service),
+    from, to,
+    products: o.items.map(i => ({ name: (i.qty + 'x ' + i.name).slice(0, 50), quantity: 1, unitary_value: Number(i.total.toFixed(2)) })),
+    volumes: [{ height: Number(b.height || c.pkgHeight) || 10, width: Number(b.width || c.pkgWidth) || 20, length: Number(b.length || c.pkgLength) || 30, weight: Number(b.weight || c.pkgWeight) || 1 }],
+    options: { platform: c.storeName || 'PrimePrint', reminder: o.code, insurance_value: Number(b.insurance ?? o.total) || 0, receipt: false, own_hand: false, tags: [{ tag: o.code, url: base ? base + '/admin.html#/pedido?id=' + o.id : null }] },
+  };
+  if (b.nfKey) payload.options.invoice = { key: String(b.nfKey).replace(/\D/g, '') };
+  const tk = meApiToken();
+  try {
+    const cart = await meCall('/me/cart', tk, payload);
+    const uuid = cart.id || cart.uuid;
+    if (!uuid) throw new Error('Retorno inesperado do carrinho ME');
+    o.me = { service: String(b.service), company: b.company || '', orderId: uuid, status: 'cart', createdAt: new Date().toISOString() };
+    saveDB();
+    const chk = await meCall('/me/shipment/checkout', tk, { orders: [uuid] });
+    o.me.status = 'paid'; o.me.price = chk.purchase?.total || null; o.me.protocol = chk.purchase?.orders?.[0]?.protocol || null;
+    saveDB();
+    await meCall('/me/shipment/generate', tk, { orders: [uuid] });
+    o.me.status = 'generated';
+    try { const pr = await meCall('/me/shipment/print', tk, { mode: 'public', orders: [uuid] }); if (pr.url) o.me.labelUrl = pr.url; } catch {}
+    try { const tr = await meCall('/me/shipment/tracking', tk, { orders: [uuid] }); const st = tr[uuid] || {}; if (st.tracking) { o.me.tracking = st.tracking; o.tracking = st.tracking; } if (st.status) o.me.status = st.status; } catch {}
+    o.me.updatedAt = new Date().toISOString();
+    o.timeline.push({ status: o.status, at: new Date().toISOString(), note: `Etiqueta ME gerada (${o.me.company || 'transportadora'})${o.me.price ? ' — ' + money(o.me.price) : ''}${o.me.tracking ? ' • ' + o.me.tracking : ''}` });
+    saveDB();
+    res.json({ ok: true, me: o.me });
+  } catch (e) { saveDB(); res.status(500).json({ error: e.message }); }
+});
+app.post('/api/orders/:id/me-refresh', auth, admin, async (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (!o.me?.orderId) return res.status(400).json({ error: 'Sem etiqueta gerada' });
+  if (!meApiActive()) return res.status(400).json({ error: 'Melhor Envio não configurado' });
+  const tk = meApiToken(), uuid = o.me.orderId;
+  try {
+    if (!o.me.labelUrl) { try { const pr = await meCall('/me/shipment/print', tk, { mode: 'public', orders: [uuid] }); if (pr.url) o.me.labelUrl = pr.url; } catch {} }
+    const tr = await meCall('/me/shipment/tracking', tk, { orders: [uuid] });
+    const st = tr[uuid] || {};
+    const prev = o.me.status;
+    if (st.tracking) { o.me.tracking = st.tracking; o.tracking = st.tracking; }
+    if (st.protocol) o.me.protocol = st.protocol;
+    if (st.status) o.me.status = st.status;
+    const ev = st.delivered_at ? 'Entregue em ' + st.delivered_at.slice(0, 10).split('-').reverse().join('/') : st.posted_at ? 'Postada em ' + st.posted_at.slice(0, 10).split('-').reverse().join('/') : st.generated_at ? 'Etiqueta gerada' : (ME_PT[st.status] || st.status || '');
+    if (ev) o.me.lastEvent = ev;
+    o.me.updatedAt = new Date().toISOString();
+    if (st.status && st.status !== prev) o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'ME: ' + (ME_PT[st.status] || st.status) + (o.me.tracking ? ' • ' + o.me.tracking : '') });
+    if (st.status === 'delivered' && o.status === 'enviado') {
+      o.status = 'entregue'; awardDeliveryPoints(o, 'entregue');
+      o.timeline.push({ status: 'entregue', at: new Date().toISOString(), note: 'Entrega confirmada pela transportadora 📬' });
+      notifyStatus(o);
+    }
+    saveDB(); res.json({ ok: true, me: o.me });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+app.post('/api/orders/:id/me-cancel', auth, admin, async (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (!o.me?.orderId) return res.status(400).json({ error: 'Sem etiqueta gerada' });
+  if (!meApiActive()) return res.status(400).json({ error: 'Melhor Envio não configurado' });
+  try {
+    await meCall('/me/shipment/cancel', meApiToken(), { order: { id: o.me.orderId, reason_id: '2', description: String(req.body.reason || 'Cancelada pela loja') } });
+    o.me.status = 'canceled'; o.me.updatedAt = new Date().toISOString();
+    o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Etiqueta ME cancelada (estorno em até 12h)' });
+    saveDB(); res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 /* ---------------- Estáticos ---------------- */

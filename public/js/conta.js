@@ -122,7 +122,7 @@ function viewOrderDetail(id) {
       <button class="btn navy" style="margin-left:auto" onclick='reorder(${JSON.stringify(o.id)})'>🔁 Repetir pedido</button></div>
     <div class="grid2">
       <div class="panel"><h3>📍 Acompanhamento</h3>${timeline(o)}
-        ${o.tracking ? `<p>🚚 <b>Rastreio:</b> <span class="mono">${esc(o.tracking)}</span> <a class="btn sm navy" target="_blank" href="https://www2.correios.com.br/sistemas/rastreamento/resultado.cfm?objetos=${o.tracking}">Rastrear nos Correios →</a> <button class="btn sm ghost" onclick="navigator.clipboard?.writeText('${o.tracking}');toast('Código copiado!','ok')">Copiar</button></p>` : ''}
+        ${trackBlock(o)}
         <p>📅 <b>Previsão de entrega:</b> ${shipETA(o)}</p>
         <h3 style="margin-top:16px">🧾 Itens</h3>${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span><span>${i.qty.toLocaleString('pt-BR')} un × ${BRL(i.unit)}</span>${o.status === 'entregue' ? ` <a class="link-more small" href="/produto.html?id=${i.productId}">⭐ Avaliar</a>` : ''}</div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
         <div class="totals" style="margin-top:10px"><div class="tt"><span>Subtotal</span><span>${BRL(o.subtotal)}</span></div>
@@ -180,6 +180,13 @@ async function approveProof(id, ok) {
   if (ok && !confirm('Aprovar a prova e liberar a produção?')) return;
   try { await api(`/api/orders/${id}/approve-art`, { method: 'PUT', body: JSON.stringify({ approved: ok, note }) }); toast(ok ? 'Prova aprovada! Indo pra produção 🚀' : 'Ajuste solicitado! ✏️', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id); }
   catch (e) { toast(e.message, 'err'); }
+}
+function trackBlock(o) {
+  if (!o.tracking) return '';
+  const isCorreios = /^[A-Z]{2}\d{9}BR$/i.test(o.tracking);
+  const via = o.me?.company ? ` <span class="small mut">via ${esc(o.me.company)}</span>` : '';
+  const last = o.me?.lastEvent ? `<br><span class="small">📍 ${esc(o.me.lastEvent)}</span>` : '';
+  return `<p>🚚 <b>Rastreio:</b> <span class="mono">${esc(o.tracking)}</span>${via}${last}<br>${isCorreios ? `<a class="btn sm navy" target="_blank" href="https://www2.correios.com.br/sistemas/rastreamento/resultado.cfm?objetos=${o.tracking}">Rastrear nos Correios →</a> ` : ''}<button class="btn sm ghost" onclick="navigator.clipboard?.writeText('${o.tracking}');toast('Código copiado!','ok')">Copiar</button></p>`;
 }
 function printReceipt(id) {
   const o = ORDERS.find(x => x.id === id);

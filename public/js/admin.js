@@ -120,6 +120,7 @@ function viewOrderDetail(id) {
         <button class="btn" onclick="setStatus('${o.id}')">Atualizar</button> <button class="btn navy" onclick="waStatus('${o.id}')">📲 Avisar cliente</button></div>
         <div style="margin-top:10px"><label class="lbl">🚚 Código de rastreio</label><div style="display:flex;gap:8px"><input class="inp" id="ntrack" value="${esc(o.tracking || '')}" placeholder="BR...BR"><button class="btn navy sm" onclick="setStatus('${o.id}',true)">Salvar</button></div></div>
         <div style="margin-top:10px"><label class="lbl">📝 Observação interna</label><input class="inp" id="nnote" placeholder="Ex: cliente avisado no WhatsApp"></div>
+        ${mePanel(o)}
         <h3 style="margin-top:18px">🧾 Itens • ${BRL(o.total)}</h3>
         ${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span></div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
         <p class="small mut">Subtotal ${BRL(o.subtotal)} • Desconto ${BRL(o.discount)} ${o.coupon ? '(' + o.coupon + ')' : ''} • Frete ${BRL(o.shipping)} (${o.shippingType}) • Pagto: ${o.payment.method} (<b>${o.payment.status}</b>)${o.payment.notified && o.payment.status !== 'paid' ? ' 🔔 <b>cliente avisou que pagou</b>' : ''}${o.payment.brand ? ' • ' + esc(o.payment.brand) + (o.payment.installments > 1 ? ' em ' + o.payment.installments + 'x' : '') : ''}${o.payment.linkUrl ? ` <a class="link-more small" target="_blank" href="${o.payment.linkUrl}">abrir checkout</a>` : ''} <button class="btn sm ${o.payment.status === 'paid' ? 'ok' : 'navy'}" onclick="togglePay('${o.id}','${o.payment.status === 'paid' ? 'pending' : 'paid'}')">${o.payment.status === 'paid' ? '✓ Pago' : 'Marcar como pago'}</button></p>
@@ -174,6 +175,54 @@ async function sendProof(id) {
     await api(`/api/orders/${id}/proof`, { method: 'PUT', body: JSON.stringify({ url: up.url, name: up.name }) });
     toast('Prova enviada ao cliente! 📤', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id);
   } catch (e) { toast(e.message, 'err'); }
+}
+
+function mePanel(o) {
+  if ((o.shippingType || '').startsWith('Retirada') || !CONFIG.meEnabled) return '';
+  const m = o.me || {};
+  if (m.orderId && m.status !== 'canceled') {
+    return `<div class="panel"><h3>📮 Etiqueta Melhor Envio</h3>
+      <p><b>${esc(m.company || '')}</b> • <span class="st st-${m.status === 'delivered' ? 'entregue' : 'pending'}">${esc(m.status || '')}</span>${m.protocol ? `<br><span class="small mut">Protocolo ${esc(m.protocol)}</span>` : ''}${m.price ? `<br><span class="small">💰 Custo: <b>${BRL(m.price)}</b></span>` : ''}${m.tracking ? `<br>🚚 <span class="mono">${esc(m.tracking)}</span> <button class="btn sm ghost" onclick="navigator.clipboard?.writeText('${m.tracking}');toast('Código copiado!','ok')">Copiar</button>` : ''}${m.lastEvent ? `<br><span class="small">📍 ${esc(m.lastEvent)}</span>` : ''}</p>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">${m.labelUrl ? `<a class="btn sm" target="_blank" href="${m.labelUrl}">🖨️ Imprimir etiqueta</a>` : '<span class="small mut">⏳ Etiqueta processando...</span>'}<button class="btn sm navy" onclick="meRefresh('${o.id}')">🔄 Atualizar rastreio</button><button class="btn sm danger" onclick="meCancel('${o.id}')">Cancelar etiqueta</button></div></div>`;
+  }
+  return `<div class="panel"><h3>📮 Etiqueta Melhor Envio</h3><p class="small mut">${m.status === 'canceled' ? 'Última etiqueta cancelada.' : 'Nenhuma etiqueta gerada.'} Frete escolhido: <b>${esc(o.shippingType || '')}</b></p><button class="btn navy" onclick="meLabelModal('${o.id}')">📮 Gerar etiqueta</button></div>`;
+}
+async function meLabelModal(id) {
+  const o = ORDERS.find(x => x.id === id);
+  openModal(`<div class="mh"><h3 style="margin:0">📮 Gerar etiqueta — ${o.code}</h3><button class="btn sm ghost" onclick="closeModal()">✕</button></div>
+  <div class="mb"><p class="small mut">Destino: ${esc(o.address?.street || '')} — CEP ${esc(o.address?.zip || '')}</p>
+  <label class="lbl">Serviço</label><select class="inp" id="me-svc"><option>Buscando...</option></select>
+  <div class="row2" style="margin-top:8px"><div><label class="lbl">Peso (kg)</label><input class="inp" id="me-w" type="number" step="0.1" value="${CONFIG.pkgWeight ?? 1}"></div><div><label class="lbl">Seguro (R$)</label><input class="inp" id="me-ins" type="number" step="0.01" value="${o.total}"></div></div>
+  <div class="row2" style="margin-top:8px"><div><label class="lbl">L×A×C (cm)</label><input class="inp" id="me-d" value="${CONFIG.pkgWidth ?? 20}x${CONFIG.pkgHeight ?? 10}x${CONFIG.pkgLength ?? 30}"></div><div><label class="lbl">Chave NF (opcional)</label><input class="inp mono" id="me-nf" placeholder="Só se emite nota"></div></div>
+  <div class="row2" style="margin-top:8px"><div><label class="lbl">Nº destino</label><input class="inp" id="me-num" placeholder="Se vazio, lê do endereço"></div><div><label class="lbl">Compl. destino</label><input class="inp" id="me-comp" placeholder="Apto, bloco..."></div></div>
+  <div class="row2" style="margin-top:8px"><div><label class="lbl">Fone destino</label><input class="inp" id="me-ph" value="${esc(o.customer?.phone || '')}"></div><div><label class="lbl">CPF/CNPJ destino</label><input class="inp" id="me-doc" value="${esc(o.customer?.cpf || '')}"></div></div>
+  <button class="btn block" style="margin-top:12px" onclick="meBuyLabel('${o.id}')">Comprar e gerar etiqueta 💳</button>
+  <p class="small mut">Desconta da sua carteira Melhor Envio. Sem NF = declaração de conteúdo automática.</p></div>`);
+  try {
+    const s = await api(`/api/orders/${id}/me-services`);
+    document.querySelector('#me-svc').innerHTML = s.options.map(x => `<option value="${x.id}" ${String(x.id) === String(o.meService) ? 'selected' : ''}>${esc(x.label)}${x.eta ? ' (' + x.eta + ')' : ''}</option>`).join('');
+  } catch (e) { document.querySelector('#me-svc').innerHTML = `<option value="">${esc(e.message)}</option>`; }
+}
+async function meBuyLabel(id) {
+  const svc = document.querySelector('#me-svc');
+  const opt = svc.options[svc.selectedIndex];
+  if (!svc.value) { toast('Escolha o serviço', 'err'); return; }
+  if (!confirm(`Confirmar etiqueta ${opt.text}? O valor desconta da carteira Melhor Envio.`)) return;
+  const dims = (document.querySelector('#me-d').value || '').split('x').map(Number);
+  try {
+    toast('Gerando etiqueta... ⏳ (carrinho → pagamento → geração)');
+    await api(`/api/orders/${id}/me-label`, { method: 'POST', body: JSON.stringify({ service: svc.value, company: opt.text.split('—')[0].trim(), weight: Number(document.querySelector('#me-w').value) || 1, width: dims[0] || 20, height: dims[1] || 10, length: dims[2] || 30, insurance: Number(document.querySelector('#me-ins').value) || 0, nfKey: document.querySelector('#me-nf').value.trim(), toNumber: document.querySelector('#me-num').value.trim(), toComplement: document.querySelector('#me-comp').value.trim(), toPhone: document.querySelector('#me-ph').value.trim(), toDoc: document.querySelector('#me-doc').value.trim() }) });
+    closeModal(); toast('Etiqueta gerada! 📮', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
+async function meRefresh(id) {
+  try { toast('Consultando transportadora... 🔄'); await api(`/api/orders/${id}/me-refresh`, { method: 'POST' }); toast('Rastreio atualizado! 📮', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id); }
+  catch (e) { toast(e.message, 'err'); }
+}
+async function meCancel(id) {
+  if (!confirm('Cancelar a etiqueta? O estorno cai na carteira em até 12h.')) return;
+  try { await api(`/api/orders/${id}/me-cancel`, { method: 'POST', body: JSON.stringify({}) }); toast('Etiqueta cancelada', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id); }
+  catch (e) { toast(e.message, 'err'); }
 }
 
 /* ---------- PRODUÇÃO (kanban) ---------- */
@@ -727,6 +776,14 @@ async function viewConfig() {
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Largura (cm)</label><input class="inp" name="pkgWidth" type="number" value="${c.pkgWidth ?? 20}"></div><div><label class="lbl">Altura (cm)</label><input class="inp" name="pkgHeight" type="number" value="${c.pkgHeight ?? 10}"></div></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Comprimento (cm)</label><input class="inp" name="pkgLength" type="number" value="${c.pkgLength ?? 30}"></div><div><label class="lbl">Token Melhor Envio</label><input class="inp mono" name="meToken" type="password" value="" placeholder="${me.hasToken ? '•••••• salvo (digite para trocar)' : 'Cole o token'}"></div></div>
     <div style="margin-top:8px"><label style="font-weight:700"><input type="checkbox" name="meEnabled" ${c.meEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar cotação ao vivo</label></div>
+    <div style="margin-top:8px"><label style="font-weight:700"><input type="checkbox" name="meSandbox" ${c.meSandbox ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> 🧪 Sandbox (ambiente de testes)</label></div>
+    <h3 style="margin-top:16px">📮 Remetente (p/ etiquetas)</h3>
+    <p class="small mut">Endereço que sai na etiqueta do Melhor Envio.</p>
+    <div class="row2"><div><label class="lbl">Nome / Razão social</label><input class="inp" name="meName" value="${esc(c.meName || '')}"></div><div><label class="lbl">CPF/CNPJ (só números)</label><input class="inp" name="meDoc" value="${esc(c.meDoc || '')}" placeholder="00000000000"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Telefone (com DDD)</label><input class="inp" name="mePhone" value="${esc(c.mePhone || '')}"></div><div><label class="lbl">E-mail do remetente</label><input class="inp" name="meEmail" value="${esc(c.meEmail || '')}"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Rua / Avenida</label><input class="inp" name="meStreet" value="${esc(c.meStreet || '')}"></div><div><label class="lbl">Número</label><input class="inp" name="meNumber" value="${esc(c.meNumber || '')}"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Bairro</label><input class="inp" name="meDistrict" value="${esc(c.meDistrict || '')}"></div><div><label class="lbl">Cidade</label><input class="inp" name="meCity" value="${esc(c.meCity || '')}"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">UF</label><input class="inp" name="meState" maxlength="2" value="${esc(c.meState || '')}"></div><div><label class="lbl">Insc. Estadual (só se emite NF)</label><input class="inp" name="meIE" value="${esc(c.meIE || '')}"></div></div>
     <h3 style="margin-top:16px">📧 E-mail automático (avisos)</h3>
     <p class="small mut">Avisa o cliente sozinho: pedido criado, pagamento aprovado, troca de status, arte e respostas. Use o SMTP da hospedagem ou Gmail com <b>senha de app</b>.</p>
     <div style="margin-bottom:8px"><label style="font-weight:700"><input type="checkbox" name="mailEnabled" ${c.mailEnabled ? 'checked' : ''} style="width:18px;height:18px;vertical-align:-3px"> Ativar avisos por e-mail</label></div>
@@ -738,7 +795,7 @@ async function viewConfig() {
 }
 async function saveConfig(e) {
   e.preventDefault(); const f = e.target;
-  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, monthlyGoal: Number(f.monthlyGoal.value) || 0, mailEnabled: f.mailEnabled.checked, smtpHost: f.smtpHost.value.trim(), smtpPort: Number(f.smtpPort.value) || 587, smtpUser: f.smtpUser.value.trim(), smtpFrom: f.smtpFrom.value.trim() }) });
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, meSandbox: f.meSandbox.checked, meName: f.meName.value, mePhone: f.mePhone.value, meEmail: f.meEmail.value, meDoc: f.meDoc.value.replace(/\D/g, ''), meStreet: f.meStreet.value, meNumber: f.meNumber.value, meDistrict: f.meDistrict.value, meCity: f.meCity.value, meState: f.meState.value.toUpperCase(), meIE: f.meIE.value, monthlyGoal: Number(f.monthlyGoal.value) || 0, mailEnabled: f.mailEnabled.checked, smtpHost: f.smtpHost.value.trim(), smtpPort: Number(f.smtpPort.value) || 587, smtpUser: f.smtpUser.value.trim(), smtpFrom: f.smtpFrom.value.trim() }) });
   if (f.meToken.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ meToken: f.meToken.value.trim() }) });
   if (f.smtpPass.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ smtpPass: f.smtpPass.value.trim() }) });
   toast('Configurações salvas! ⚙️', 'ok');
