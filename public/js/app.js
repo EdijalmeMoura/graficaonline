@@ -77,10 +77,32 @@ function openModal(html) {
 function closeModal() { $('#modal')?.classList.remove('on'); }
 
 /* ---------- Layout da loja ---------- */
+function seoTags() {
+  const origin = location.origin;
+  let link = document.querySelector('link[rel="canonical"]');
+  if (!link) { link = document.createElement('link'); link.rel = 'canonical'; document.head.appendChild(link); }
+  link.href = origin + location.pathname + location.search;
+  const meta = (k, content, prop) => {
+    let m = document.querySelector(prop ? `meta[property="${k}"]` : `meta[name="${k}"]`);
+    if (!m) { m = document.createElement('meta'); if (prop) m.setAttribute('property', k); else m.name = k; document.head.appendChild(m); }
+    m.content = content;
+  };
+  meta('og:url', link.href, true);
+  if (!document.querySelector('meta[property="og:image"]')) meta('og:image', origin + '/img/hero-print.jpg', true);
+  if (!document.querySelector('meta[property="og:site_name"]')) meta('og:site_name', CONFIG.storeName || 'PrimePrint', true);
+  const ld = document.createElement('script'); ld.type = 'application/ld+json';
+  ld.textContent = JSON.stringify({ '@context': 'https://schema.org', '@type': 'WebSite', name: CONFIG.storeName || 'PrimePrint', url: origin + '/' });
+  document.head.appendChild(ld);
+}
+function jsonLd(obj) {
+  const s = document.createElement('script'); s.type = 'application/ld+json';
+  s.textContent = JSON.stringify(obj); document.head.appendChild(s);
+}
 let CATS = [], CONFIG = {};
 async function loadGlobals() {
   try { [CATS, CONFIG] = await Promise.all([api('/api/categories'), api('/api/config')]); }
   catch { CATS = []; CONFIG = { storeName: 'PrimePrint', phone: '(81) 99636-5068', email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h', whatsapp: '5581996365068' }; }
+  try { seoTags(); } catch {}
 }
 function renderHeader() {
   const u = Auth.user;

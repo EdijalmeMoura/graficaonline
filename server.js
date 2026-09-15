@@ -1218,6 +1218,17 @@ app.put('/api/orders/:id/approve-art', auth, (req, res) => {
   saveDB(); notifyProofDecision(o, approved, note); res.json(o);
 });
 
+const siteBase = req => publicBase() || ((req.headers['x-forwarded-proto'] || req.protocol) + '://' + req.get('host'));
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`User-agent: *\nAllow: /\nDisallow: /admin.html\nDisallow: /conta.html\nDisallow: /checkout.html\nDisallow: /carrinho.html\nDisallow: /api/\n\nSitemap: ${siteBase(req)}/sitemap.xml\n`);
+});
+app.get('/sitemap.xml', (req, res) => {
+  const base = siteBase(req), today = new Date().toISOString().slice(0, 10);
+  const urls = [{ u: '/', p: '1.0' }, { u: '/produtos.html', p: '0.9' }, { u: '/pagina.html?p=gabaritos', p: '0.7' }, { u: '/pagina.html?p=como-funciona', p: '0.5' }, { u: '/pagina.html?p=duvidas', p: '0.5' }, { u: '/pagina.html?p=quem-somos', p: '0.5' }, { u: '/pagina.html?p=criacao-e-envio', p: '0.5' }, { u: '/pagina.html?p=politicas', p: '0.5' }, { u: '/pagina.html?p=contato', p: '0.4' }];
+  loadDB().products.filter(p => p.active !== false).forEach(p => urls.push({ u: '/produto.html?id=' + p.id, p: (p.sold || 0) > 100 ? '0.8' : '0.6' }));
+  res.type('application/xml').send(`<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map(x => `  <url><loc>${base}${x.u.replace(/&/g, '&amp;')}</loc><lastmod>${today}</lastmod><changefreq>weekly</changefreq><priority>${x.p}</priority></url>`).join('\n')}\n</urlset>`);
+});
+
 /* ---------------- Estáticos ---------------- */
 app.use('/uploads', express.static(UPLOAD_DIR));
 app.use(express.static(PUBLIC_DIR, {

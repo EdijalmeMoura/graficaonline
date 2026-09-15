@@ -33,6 +33,7 @@ async function pageHome() {
   setInterval(() => goSlide((window._slide + 1) % window._nslides), 5000);
   // categorias
   $('#home-cats').innerHTML = CATS.map(c => `<a class="cat-card" href="/produtos.html?cat=${c.id}"><div class="tile">${c.icon}</div><b>${esc(c.name)}</b><span>${c.count || ''} produtos</span></a>`).join('');
+  jsonLd({ '@context': 'https://schema.org', '@type': 'PrintShop', name: CONFIG.storeName || 'PrimePrint', url: location.origin + '/', image: location.origin + '/img/hero-print.jpg', telephone: CONFIG.phone || '', email: CONFIG.email || '', priceRange: 'R$', address: { '@type': 'PostalAddress', addressLocality: 'Paulista', addressRegion: 'PE', addressCountry: 'BR' }, openingHours: 'Mo-Fr 09:00-18:00' });
   // mais vendidos
   $('#home-prods').innerHTML = products.slice(0, 8).map(productCard).join('');
   const offers = products.filter(offerPct).slice(0, 4);
@@ -115,6 +116,14 @@ async function pageProduct() {
   const id = new URLSearchParams(location.search).get('id');
   PD = await api(`/api/products/${id}`);
   document.title = PD.name + ' — PrimePrint';
+  try {
+    const _desc = `${PD.name}: ${PD.tagline || ''} Personalize online com prova digital grátis, produção expressa e envio para todo o Brasil.`.slice(0, 155);
+    let _md = document.querySelector('meta[name="description"]');
+    if (!_md) { _md = document.createElement('meta'); _md.name = 'description'; document.head.appendChild(_md); }
+    _md.content = _desc;
+    const _min = Math.min(...PD.quantities.map(q => q.price));
+    jsonLd({ '@context': 'https://schema.org', '@type': 'Product', name: PD.name, image: location.origin + (PD.img || '/img/hero-print.jpg'), description: _desc, brand: { '@type': 'Brand', name: CONFIG.storeName || 'PrimePrint' }, offers: { '@type': 'Offer', url: location.href, priceCurrency: 'BRL', price: _min, availability: 'https://schema.org/InStock' }, aggregateRating: { '@type': 'AggregateRating', ratingValue: Number(PD.rating || 5).toFixed(1), reviewCount: Math.max(1, PD.reviews?.length || 1) } });
+  } catch {}
   $('#crumb').innerHTML = `Início › ${esc(CATS.find(c => c.id === PD.category)?.name || 'Produtos')} › <b>${esc(PD.name)}</b>`;
   PDSEL = { format: PD.formats[0]?.id, paper: PD.papers[0]?.id, color: PD.colors[0]?.id, finish: PD.finishes[0]?.id, qty: String((PD.quantities[0]?.qty === 1 ? PD.quantities[0] : PD.quantities[1] ?? PD.quantities[0]).qty), deadline: PD.deadlines?.[0]?.id };
   $('#pd-media').innerHTML = `
