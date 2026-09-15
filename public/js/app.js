@@ -77,6 +77,25 @@ function openModal(html) {
 function closeModal() { $('#modal')?.classList.remove('on'); }
 
 /* ---------- Layout da loja ---------- */
+function shade(hex, pct) {
+  const n = String(hex || '').replace('#', '');
+  if (n.length !== 6) return hex;
+  const v = i => Math.max(0, Math.min(255, Math.round(parseInt(n.substr(i, 2), 16) * (100 + pct) / 100)));
+  return '#' + [0, 2, 4].map(v).map(x => x.toString(16).padStart(2, '0')).join('');
+}
+function applyTheme(c) {
+  c = c || {};
+  const r = document.documentElement.style;
+  const p1 = c.themePrimary || '#FF4D00', p2 = c.themePrimary2 || '#FF7A00';
+  r.setProperty('--primary', p1);
+  r.setProperty('--primary2', p2);
+  r.setProperty('--primary-d', shade(p1, -18));
+  r.setProperty('--grad', `linear-gradient(135deg,${p1},${p2})`);
+  r.setProperty('--glow', `0 8px 24px ${p1}59`);
+  r.setProperty('--navy', c.themeNavy || '#0A1633');
+  r.setProperty('--navy2', c.themeNavy2 || '#14295C');
+  r.setProperty('--bg', c.themeBg || '#F4F6FB');
+}
 function seoTags() {
   const origin = location.origin;
   let link = document.querySelector('link[rel="canonical"]');
@@ -103,6 +122,7 @@ async function loadGlobals() {
   try { [CATS, CONFIG] = await Promise.all([api('/api/categories'), api('/api/config')]); }
   catch { CATS = []; CONFIG = { storeName: 'PrimePrint', phone: '(81) 99636-5068', email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h', whatsapp: '5581996365068' }; }
   try { seoTags(); } catch {}
+  try { applyTheme(CONFIG); } catch {}
 }
 function renderHeader() {
   const u = Auth.user;

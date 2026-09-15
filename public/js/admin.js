@@ -791,14 +791,28 @@ async function viewConfig() {
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Usuário (seu e-mail)</label><input class="inp" name="smtpUser" value="${esc(c.smtpUser || '')}" placeholder="voce@gmail.com"></div><div><label class="lbl">Senha / senha de app</label><input class="inp mono" name="smtpPass" type="password" value="" placeholder="${c.smtpUser ? '•••••• salva (digite para trocar)' : 'Senha ou senha de app'}"></div></div>
     <div style="margin-top:8px;max-width:340px"><label class="lbl">E-mail remetente (opcional)</label><input class="inp" name="smtpFrom" value="${esc(c.smtpFrom || '')}" placeholder="vendas@sualoja.com.br"></div>
     <div style="margin-top:10px"><button type="button" class="btn sm navy" onclick="testMail()">✉️ Enviar e-mail de teste</button></div>
+    <h3 style="margin-top:16px">🎨 Cores do site</h3>
+    <p class="small mut">Mude a identidade da loja. A prévia aplica na hora — salve para valer no site.</p>
+    <div class="row2"><div><label class="lbl">Primária (botões)</label><input type="color" class="inp" name="themePrimary" value="${esc(c.themePrimary || '#FF4D00')}" oninput="previewTheme(this.form)" style="height:44px;padding:4px;cursor:pointer"></div><div><label class="lbl">Gradiente (par da primária)</label><input type="color" class="inp" name="themePrimary2" value="${esc(c.themePrimary2 || '#FF7A00')}" oninput="previewTheme(this.form)" style="height:44px;padding:4px;cursor:pointer"></div></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Marinho (cabeçalho)</label><input type="color" class="inp" name="themeNavy" value="${esc(c.themeNavy || '#0A1633')}" oninput="previewTheme(this.form)" style="height:44px;padding:4px;cursor:pointer"></div><div><label class="lbl">Marinho 2 (detalhes)</label><input type="color" class="inp" name="themeNavy2" value="${esc(c.themeNavy2 || '#14295C')}" oninput="previewTheme(this.form)" style="height:44px;padding:4px;cursor:pointer"></div></div>
+    <div style="margin-top:8px;max-width:300px"><label class="lbl">Fundo da página</label><input type="color" class="inp" name="themeBg" value="${esc(c.themeBg || '#F4F6FB')}" oninput="previewTheme(this.form)" style="height:44px;padding:4px;cursor:pointer"></div>
+    <div style="margin-top:8px"><button type="button" class="btn sm ghost" onclick="resetTheme(this.form)">↩️ Restaurar padrão</button></div>
     <button class="btn" style="margin-top:12px">Salvar configurações ✅</button></form></div>`;
 }
 async function saveConfig(e) {
   e.preventDefault(); const f = e.target;
-  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, meSandbox: f.meSandbox.checked, meName: f.meName.value, mePhone: f.mePhone.value, meEmail: f.meEmail.value, meDoc: f.meDoc.value.replace(/\D/g, ''), meStreet: f.meStreet.value, meNumber: f.meNumber.value, meDistrict: f.meDistrict.value, meCity: f.meCity.value, meState: f.meState.value.toUpperCase(), meIE: f.meIE.value, monthlyGoal: Number(f.monthlyGoal.value) || 0, mailEnabled: f.mailEnabled.checked, smtpHost: f.smtpHost.value.trim(), smtpPort: Number(f.smtpPort.value) || 587, smtpUser: f.smtpUser.value.trim(), smtpFrom: f.smtpFrom.value.trim() }) });
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, meSandbox: f.meSandbox.checked, meName: f.meName.value, mePhone: f.mePhone.value, meEmail: f.meEmail.value, meDoc: f.meDoc.value.replace(/\D/g, ''), meStreet: f.meStreet.value, meNumber: f.meNumber.value, meDistrict: f.meDistrict.value, meCity: f.meCity.value, meState: f.meState.value.toUpperCase(), meIE: f.meIE.value, themePrimary: f.themePrimary.value, themePrimary2: f.themePrimary2.value, themeNavy: f.themeNavy.value, themeNavy2: f.themeNavy2.value, themeBg: f.themeBg.value, monthlyGoal: Number(f.monthlyGoal.value) || 0, mailEnabled: f.mailEnabled.checked, smtpHost: f.smtpHost.value.trim(), smtpPort: Number(f.smtpPort.value) || 587, smtpUser: f.smtpUser.value.trim(), smtpFrom: f.smtpFrom.value.trim() }) });
   if (f.meToken.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ meToken: f.meToken.value.trim() }) });
   if (f.smtpPass.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ smtpPass: f.smtpPass.value.trim() }) });
   toast('Configurações salvas! ⚙️', 'ok');
+}
+function previewTheme(f) {
+  applyTheme({ themePrimary: f.themePrimary.value, themePrimary2: f.themePrimary2.value, themeNavy: f.themeNavy.value, themeNavy2: f.themeNavy2.value, themeBg: f.themeBg.value });
+}
+function resetTheme(f) {
+  f.themePrimary.value = '#FF4D00'; f.themePrimary2.value = '#FF7A00'; f.themeNavy.value = '#0A1633'; f.themeNavy2.value = '#14295C'; f.themeBg.value = '#F4F6FB';
+  previewTheme(f);
+  toast('Cores padrão restauradas — salve para aplicar ↩️', 'ok');
 }
 async function testMail() {
   const to = prompt('Enviar e-mail de teste para:', CONFIG.email || '');

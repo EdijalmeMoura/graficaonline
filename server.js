@@ -434,7 +434,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', meSandbox: false, meName: '', mePhone: '', meEmail: '', meDoc: '', meStreet: '', meNumber: '', meDistrict: '', meCity: '', meState: '', meIE: '', monthlyGoal: 30000, mailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', smtpFrom: '',
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: '', pixName: '', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', meSandbox: false, meName: '', mePhone: '', meEmail: '', meDoc: '', meStreet: '', meNumber: '', meDistrict: '', meCity: '', meState: '', meIE: '', themePrimary: '#FF4D00', themePrimary2: '#FF7A00', themeNavy: '#0A1633', themeNavy2: '#14295C', themeBg: '#F4F6FB', monthlyGoal: 30000, mailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', smtpFrom: '',
   };
 
   const templates = [
