@@ -24,11 +24,11 @@ const thumbHTML = (p, size) => p.img
   : (p.icon || '🖨');
 
 const STATUS = {
-  aguardando_arte: 'Aguardando arte', em_analise: 'Em análise', aprovado: 'Arte aprovada',
+  aguardando_arte: 'Aguardando arte', em_analise: 'Em análise', aprovado: 'Arte aprovada', aguardando_aprovacao: 'Aguard. aprovação',
   em_producao: 'Em produção', pronto_envio: 'Pronto p/ envio', enviado: 'Enviado',
   entregue: 'Entregue', cancelado: 'Cancelado'
 };
-const FLOW = ['aguardando_arte', 'em_analise', 'aprovado', 'em_producao', 'pronto_envio', 'enviado', 'entregue'];
+const FLOW = ['aguardando_arte', 'em_analise', 'aprovado', 'aguardando_aprovacao', 'em_producao', 'pronto_envio', 'enviado', 'entregue'];
 
 /* ---------- API ---------- */
 const Auth = {

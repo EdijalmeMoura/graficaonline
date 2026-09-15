@@ -131,6 +131,9 @@ function viewOrderDetail(id) {
           <label class="lbl">Feedback (se reprovar)</label><input class="inp" id="art-fb" placeholder="Ex: faltou sangria, texto cortado...">
           <div style="display:flex;gap:8px;margin-top:10px"><button class="btn ok" onclick="reviewArt('${o.id}',true)">✅ Aprovar</button><button class="btn danger" onclick="reviewArt('${o.id}',false)">❌ Reprovar</button></div>`
           : `<p class="mut">Cliente ainda não enviou a arte. <button class="btn sm navy" onclick="waCobrar('${o.id}')">💬 Cobrar no WhatsApp</button></p>`}</div>
+        <div class="panel"><h3>📤 Prova p/ o cliente</h3>
+          ${o.art?.proofFile ? `<p>📎 <a class="link-more" href="${o.art.proofFile}" target="_blank">${esc(o.art.proofName || 'ver prova')}</a><br><span class="small">Enviada em ${fmtDT(o.art.proofAt)} • Status: <b>${{ pending: '⏳ aguard. cliente', approved: 'aprovada ✅', changes: 'ajuste pedido ✏️' }[o.art.approval] || o.art.approval}</b></span></p>${o.art.approval === 'changes' && o.art.approvalNote ? `<p class="small">💬 <b>Cliente pediu:</b> ${esc(o.art.approvalNote)}</p>` : ''}` : `<p class="small mut">Nenhuma prova enviada.</p>`}
+          <label class="lbl">Enviar / atualizar prova (PDF ou imagem)</label><div style="display:flex;gap:8px;flex-wrap:wrap"><input type="file" id="proof-file" accept=".pdf,.jpg,.jpeg,.png,.webp"><button class="btn navy sm" onclick="sendProof('${o.id}')">Enviar prova</button></div></div>
         <div class="panel"><h3>📍 Linha do tempo</h3><div class="tl">${o.timeline.map(t => `<div class="ev done"><b>${STATUS[t.status] || t.status}</b><span>${fmtDT(t.at)}${t.note ? ' — ' + esc(t.note) : ''}</span></div>`).join('')}</div></div>
       </div>
     </div>`;
@@ -160,6 +163,17 @@ async function reviewArt(id, approved) {
   await api(`/api/orders/${id}/art-review`, { method: 'PUT', body: JSON.stringify({ approved, feedback }) });
   toast(approved ? 'Arte aprovada! ✅' : 'Arte reprovada, cliente avisado ❌', 'ok');
   ORDERS = await api('/api/orders'); viewOrderDetail(id);
+}
+
+async function sendProof(id) {
+  const f = document.querySelector('#proof-file')?.files[0];
+  if (!f) { toast('Escolha o arquivo da prova', 'err'); return; }
+  try {
+    toast('Enviando prova... ⏳');
+    const up = await uploadFile(f);
+    await api(`/api/orders/${id}/proof`, { method: 'PUT', body: JSON.stringify({ url: up.url, name: up.name }) });
+    toast('Prova enviada ao cliente! 📤', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id);
+  } catch (e) { toast(e.message, 'err'); }
 }
 
 /* ---------- PRODUÇÃO (kanban) ---------- */

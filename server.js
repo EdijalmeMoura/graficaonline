@@ -1125,7 +1125,7 @@ app.post('/api/orders/:id/notify-payment', auth, (req, res) => {
    ============================================================ */
 const money = n => 'R$ ' + Number(n || 0).toFixed(2).replace('.', ',');
 const escHtml = s => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-const ST_PT = { aguardando_arte: 'Aguardando arte', em_analise: 'Em análise', aprovado: 'Arte aprovada', em_producao: 'Em produção', pronto_envio: 'Pronto para envio', enviado: 'Enviado', entregue: 'Entregue', cancelado: 'Cancelado' };
+const ST_PT = { aguardando_arte: 'Aguardando arte', em_analise: 'Em análise', aprovado: 'Arte aprovada', aguardando_aprovacao: 'Aguardando aprovação', em_producao: 'Em produção', pronto_envio: 'Pronto para envio', enviado: 'Enviado', entregue: 'Entregue', cancelado: 'Cancelado' };
 const mailCfg = () => { const c = loadDB().config; return { enabled: c.mailEnabled === true, host: c.smtpHost || process.env.SMTP_HOST || '', port: Number(c.smtpPort || process.env.SMTP_PORT || 587), user: c.smtpUser || process.env.SMTP_USER || '', pass: c.smtpPass || process.env.SMTP_PASS || '', from: c.smtpFrom || process.env.SMTP_FROM || '' }; };
 async function sendMail({ to, subject, title, body }) {
   try {
@@ -1169,6 +1169,44 @@ app.post('/api/admin/mail-test', auth, admin, async (req, res) => {
   const r = await sendMail({ to, subject: 'Teste de e-mail — ' + (loadDB().config.storeName || 'PrimePrint'), title: 'Tudo certo! ✅', body: '<p>Este é um e-mail de teste da sua gráfica online. Se você recebeu, os avisos automáticos estão funcionando. 🎉</p>' });
   if (r.sent) return res.json({ ok: true });
   res.status(400).json({ error: r.error || 'E-mail não configurado (ative e preencha o SMTP)' });
+});
+
+function notifyProof(o) {
+  const u = orderUser(o.userId);
+  if (!u || !u.email) return;
+  const base = publicBase();
+  const link = (o.art?.proofFile && base) ? base + o.art.proofFile : null;
+  sendMail({ to: u.email, subject: `Sua prova está pronta — ${o.code} 🎨`, title: 'Sua prova está pronta! 🎨', body: `<p>Olá <b>${escHtml(u.name)}</b>! Preparamos a prova do pedido <b>${o.code}</b>. Confira com atenção e aprove ou peça ajustes:</p>${link ? `<p style="text-align:center"><a href="${link}" style="background:#0B1E3B;color:#fff;text-decoration:none;font-weight:700;padding:12px 24px;border-radius:10px">📤 Ver prova</a></p>` : ''}<p>A produção só começa após sua aprovação. ✅</p>` });
+}
+function notifyProofDecision(o, approved, note) {
+  const c = loadDB().config;
+  if (!c.email) return;
+  const u = orderUser(o.userId);
+  sendMail({ to: c.email, subject: approved ? `Prova APROVADA — ${o.code} ✅` : `Ajuste pedido na prova — ${o.code} ✏️`, title: approved ? 'Prova aprovada! ✅' : 'Cliente pediu ajuste ✏️', body: approved ? `<p><b>${escHtml(u?.name || '')}</b> aprovou a prova do pedido <b>${o.code}</b>. Pode imprimir! 🖨️</p>` : `<p><b>${escHtml(u?.name || '')}</b> pediu ajuste na prova do pedido <b>${o.code}</b>:</p><p style="background:#FFF7ED;border:1px solid #F59E0B;border-radius:8px;padding:12px">💬 <b>${escHtml(note || 'Ver detalhes no painel')}</b></p>` });
+}
+app.put('/api/orders/:id/proof', auth, admin, (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  const { url, name = '' } = req.body;
+  if (!url) return res.status(400).json({ error: 'Envie o arquivo da prova' });
+  o.art = o.art || {};
+  o.art.proofFile = String(url).slice(0, 300); o.art.proofName = String(name).slice(0, 120); o.art.proofAt = new Date().toISOString();
+  o.art.approval = 'pending'; o.art.approvalNote = '';
+  o.status = 'aguardando_aprovacao';
+  o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Prova enviada ao cliente' });
+  saveDB(); notifyProof(o); res.json(o);
+});
+app.put('/api/orders/:id/approve-art', auth, (req, res) => {
+  const o = loadDB().orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (req.user.role !== 'admin' && o.userId !== req.user.id) return res.status(403).json({ error: 'Sem acesso' });
+  if (o.art?.approval !== 'pending') return res.status(400).json({ error: 'Sem prova pendente' });
+  const approved = req.body.approved === true, note = String(req.body.note || '').slice(0, 500);
+  o.art.approval = approved ? 'approved' : 'changes';
+  o.art.approvalAt = new Date().toISOString(); o.art.approvalNote = note;
+  o.status = approved ? 'em_producao' : 'em_analise';
+  o.timeline.push({ status: o.status, at: new Date().toISOString(), note: approved ? 'Prova aprovada pelo cliente' : 'Cliente pediu ajuste: ' + (note || '—') });
+  saveDB(); notifyProofDecision(o, approved, note); res.json(o);
 });
 
 /* ---------------- Estáticos ---------------- */

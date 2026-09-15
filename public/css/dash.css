@@ -36,7 +36,7 @@ table.tbl{width:100%;border-collapse:collapse;font-size:13.8px}
 .st::before{content:'';width:7px;height:7px;border-radius:99px;background:currentColor}
 .st-aguardando_arte{background:#FEF3C7;color:#92400E}.st-em_analise{background:#DBEAFE;color:#1D4ED8}
 .st-aprovado,.st-entregue{background:#D1FAE5;color:#065F46}.st-em_producao{background:#E0E7FF;color:#4338CA}
-.st-pronto_envio{background:#F5D0FE;color:#86198F}.st-enviado{background:#CFFAFE;color:#0E7490}
+.st-aguardando_aprovacao{background:#FFEDD5;color:#C2410C}.st-pronto_envio{background:#F5D0FE;color:#86198F}.st-enviado{background:#CFFAFE;color:#0E7490}
 .st-cancelado{background:#FEE2E2;color:#991B1B}
 .st-paid{background:#D1FAE5;color:#065F46}.st-pending{background:#FEF3C7;color:#92400E}
 .st-approved,.st-in_review{background:#DBEAFE;color:#1D4ED8}.st-rejected{background:#FEE2E2;color:#991B1B}

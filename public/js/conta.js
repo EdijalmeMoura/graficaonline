@@ -133,6 +133,7 @@ function viewOrderDetail(id) {
         <div class="tt gt"><span>Total</span><span>${BRL(o.total)}</span></div></div></div>
       <div>
         <div class="panel"><h3>🎨 Arte do pedido</h3>
+          ${proofBlock(o)}
           ${o.art?.file ? `<p>📎 <a class="link-more" href="${o.art.file}" target="_blank">${esc(o.art.originalName || 'ver arquivo')}</a></p><p>Status: <span class="st st-${o.art.status}">${{ pending: 'pendente', in_review: 'em análise', approved: 'aprovada ✅', rejected: 'reprovada ❌' }[o.art.status]}</span></p>${o.art.feedback ? `<p class="small">💬 <b>Feedback:</b> ${esc(o.art.feedback)}</p>` : ''}` : `<p class="mut">Nenhuma arte enviada ainda.</p>`}
           ${['aguardando_arte'].includes(o.status) || o.art?.status === 'rejected' ? `<label class="filebox" style="display:block;margin-top:10px">📤 <b>${o.art?.status === 'rejected' ? 'Reenviar arte corrigida' : 'Enviar arte agora'}</b><br><span class="small mut">PDF, JPG, PNG, AI, PSD, CDR — até 60MB</span><input type="file" hidden onchange="sendArt('${o.id}',this)"></label><div id="art-ok"></div>` : `<p class="small mut">✅ Arte recebida. Nossa equipe analisa antes de imprimir.</p>`}
         </div>
@@ -165,6 +166,19 @@ async function checkPaid(code) {
 }
 async function notifyPaidCt(id) {
   try { await api(`/api/orders/${id}/notify-payment`, { method: 'POST' }); toast('Valeu! Vamos confirmar 🙏', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id); }
+  catch (e) { toast(e.message, 'err'); }
+}
+function proofBlock(o) {
+  if (!o.art?.proofFile) return '';
+  if (o.art.approval === 'pending') return `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin-bottom:10px">📤 <b>Sua prova está pronta!</b> Confira com atenção:<br><br>📎 <a class="link-more" href="${o.art.proofFile}" target="_blank"><b>${esc(o.art.proofName || 'abrir prova')}</b></a><br><br><button class="btn ok sm" onclick="approveProof('${o.id}',true)">Aprovar ✅</button><div style="margin-top:10px"><textarea class="inp" id="proof-note" rows="2" placeholder="Precisa de ajuste? Descreva aqui..."></textarea><br><button class="btn sm danger" style="margin-top:6px" onclick="approveProof('${o.id}',false)">Pedir ajuste ✏️</button></div></div>`;
+  if (o.art.approval === 'approved') return `<p class="small">📤 Prova <b>aprovada por você</b> ✅ (<a class="link-more" href="${o.art.proofFile}" target="_blank">ver</a>)</p>`;
+  return `<p class="small">📤 Você pediu ajuste na prova ⏳ — estamos corrigindo! (<a class="link-more" href="${o.art.proofFile}" target="_blank">ver</a>)</p>`;
+}
+async function approveProof(id, ok) {
+  const note = document.querySelector('#proof-note')?.value.trim() || '';
+  if (!ok && !note) { toast('Descreva o ajuste necessário ✏️', 'err'); return; }
+  if (ok && !confirm('Aprovar a prova e liberar a produção?')) return;
+  try { await api(`/api/orders/${id}/approve-art`, { method: 'PUT', body: JSON.stringify({ approved: ok, note }) }); toast(ok ? 'Prova aprovada! Indo pra produção 🚀' : 'Ajuste solicitado! ✏️', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id); }
   catch (e) { toast(e.message, 'err'); }
 }
 function printReceipt(id) {
