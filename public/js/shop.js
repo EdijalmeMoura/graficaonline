@@ -19,7 +19,7 @@ async function initShop() {
 
 /* ---------- HOME ---------- */
 async function pageHome() {
-  const [banners, products] = await Promise.all([api('/api/banners'), api('/api/products')]);
+  const [banners, products, testimonials, gallery] = await Promise.all([api('/api/banners'), api('/api/products'), api('/api/testimonials'), api('/api/gallery')]);
   ALL_PRODUCTS = products;
   // hero
   const hero = $('#hero');
@@ -39,6 +39,9 @@ async function pageHome() {
   const offers = products.filter(offerPct).slice(0, 4);
   if ($('#home-offers')) $('#home-offers').innerHTML = offers.map(productCard).join('');
   if ($('#offers-wrap')) $('#offers-wrap').style.display = offers.length ? '' : 'none';
+  if ($('#home-deps')) $('#home-deps').innerHTML = testimonials.map(t => `<div class="dep"><div class="stars">${'★'.repeat(t.stars || 5)}</div><p>"${esc(t.text)}"</p><b>${esc(t.name)}</b> <span>• ${esc(t.detail || '')}</span></div>`).join('');
+  if ($('#home-gallery')) $('#home-gallery').innerHTML = gallery.map(g => `<div class="gal-card"><img src="${g.img}" alt="${esc(g.title)}" loading="lazy"><div><b>${esc(g.title)}</b><span>${esc(g.tag || '')}</span></div></div>`).join('');
+  if ($('#gallery-wrap')) $('#gallery-wrap').style.display = gallery.length ? '' : 'none';
   // calculadora
   const sel = $('#calc-prod');
   sel.innerHTML = products.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');

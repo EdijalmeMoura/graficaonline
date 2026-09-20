@@ -305,3 +305,11 @@ footer.site{background:linear-gradient(180deg,#0A1633,#060D22);color:#CBD5E1;mar
   #toasts{left:12px;right:12px;bottom:12px}
   #toasts .toast{width:100%}
 }
+
+/* ---------- GALERIA ---------- */
+.gal-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px}
+.gal-card{border:1px solid #e5e9f2;border-radius:14px;overflow:hidden;background:#fff}
+.gal-card img{width:100%;height:150px;object-fit:cover;display:block}
+.gal-card div{padding:8px 10px;display:flex;flex-direction:column}
+.gal-card b{font-size:13px}
+.gal-card span{font-size:11px;color:#64748b}

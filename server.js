@@ -451,7 +451,20 @@ function seed() {
     ];
     cvSeed.rating = 5;
   }
-  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, templates, messages: [], config };
+  const testimonials = [
+    { id: 'dep1', name: 'Mariana L.', detail: 'Loja de roupas, Recife/PE', text: 'Cartões com qualidade absurda e chegaram antes do prazo. Virei cliente fiel!', stars: 5, active: true },
+    { id: 'dep2', name: 'Carlos E.', detail: 'Hamburgueria, Paulista/PE', text: 'Fiz 10 mil panfletos pra inauguração. Preço imbatível e a arte ficou linda.', stars: 5, active: true },
+    { id: 'dep3', name: 'Fernanda C.', detail: 'Clínica estética, Olinda/PE', text: 'O suporte me ajudou com a arte no WhatsApp. Atendimento nota 10.', stars: 5, active: true },
+  ];
+  const gallery = [
+    { id: 'g1', img: '/img/products/cartao-visita.jpg', title: 'Cartões de visita', tag: 'Papelaria', active: true },
+    { id: 'g2', img: '/img/products/panfleto.jpg', title: 'Panfletos', tag: 'Divulgação', active: true },
+    { id: 'g3', img: '/img/products/banner-lona.jpg', title: 'Banner em lona', tag: 'Grande formato', active: true },
+    { id: 'g4', img: '/img/products/adesivo-vinil.jpg', title: 'Adesivos vinil', tag: 'Rótulos', active: true },
+    { id: 'g5', img: '/img/products/folder-a4.jpg', title: 'Folders', tag: 'Divulgação', active: true },
+    { id: 'g6', img: '/img/products/calendario-mesa.jpg', title: 'Calendários de mesa', tag: 'Brindes', active: true },
+  ];
+  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, testimonials, gallery, templates, messages: [], config };
 }
 
 /* ---------------- Auth helpers ---------------- */
@@ -505,6 +518,8 @@ app.get('/api/categories', (req, res) => {
   res.json(withCount);
 });
 app.get('/api/banners', (req, res) => res.json(loadDB().banners.filter(b => b.active)));
+app.get('/api/testimonials', (req, res) => res.json((loadDB().testimonials || []).filter(t => t.active !== false)));
+app.get('/api/gallery', (req, res) => res.json((loadDB().gallery || []).filter(g => g.active !== false)));
 app.get('/api/products', (req, res) => {
   const { q = '', category = '', sort = 'sold' } = req.query;
   let list = loadDB().products.filter(p => p.active !== false);
@@ -866,6 +881,8 @@ app.put('/api/admin/customers/:id', auth, admin, (req, res) => {
   saveDB(); res.json({ ok: true });
 });
 app.get('/api/admin/banners', auth, admin, (req, res) => res.json(loadDB().banners));
+app.get('/api/admin/testimonials', auth, admin, (req, res) => res.json(loadDB().testimonials || []));
+app.get('/api/admin/gallery', auth, admin, (req, res) => res.json(loadDB().gallery || []));
 app.put('/api/orders/:id/pay', auth, admin, (req, res) => {
   const o = loadDB().orders.find(x => x.id === req.params.id);
   if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
@@ -953,6 +970,14 @@ app.delete('/api/coupons/:id', auth, admin, (req, res) => {
 app.get('/api/templates', (req, res) => res.json(loadDB().templates || []));
 app.put('/api/templates', auth, admin, (req, res) => {
   loadDB().templates = (req.body.templates || []).map(t => ({ ...t, id: t.id || uid('t-'), updatedAt: new Date().toISOString() }));
+  saveDB(); res.json({ ok: true });
+});
+app.put('/api/testimonials', auth, admin, (req, res) => {
+  loadDB().testimonials = req.body.testimonials || [];
+  saveDB(); res.json({ ok: true });
+});
+app.put('/api/gallery', auth, admin, (req, res) => {
+  loadDB().gallery = req.body.gallery || [];
   saveDB(); res.json({ ok: true });
 });
 app.put('/api/banners', auth, admin, (req, res) => {

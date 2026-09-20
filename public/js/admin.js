@@ -25,6 +25,7 @@ function renderSide(active, badges = {}) {
       <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
       <a href="#/pagamentos" class="${active === 'pagamentos' ? 'on' : ''}">💳 Pagamentos</a>
       <a href="#/banners" class="${active === 'banners' ? 'on' : ''}">🖼️ Banners</a>
+      <a href="#/vitrine" class="${active === 'vitrine' ? 'on' : ''}">🌟 Vitrine</a>
       <a href="#/gabaritos" class="${active === 'gabaritos' ? 'on' : ''}">📐 Gabaritos</a>
       <a href="#/relatorios" class="${active === 'relatorios' ? 'on' : ''}">📈 Relatórios</a>
       <a href="#/bi" class="${active === 'bi' ? 'on' : ''}">📊 BI Gerencial</a>
@@ -52,6 +53,7 @@ async function route() {
     if (path === 'cupons') return viewCoupons();
     if (path === 'pagamentos') return viewPayments();
     if (path === 'banners') return viewBanners();
+    if (path === 'vitrine') return viewVitrine();
     if (path === 'gabaritos') return viewTemplates();
     if (path === 'relatorios') return viewReports();
     if (path === 'bi') return viewBI();
@@ -813,6 +815,60 @@ function resetTheme(f) {
   f.themePrimary.value = '#FF4D00'; f.themePrimary2.value = '#FF7A00'; f.themeNavy.value = '#0A1633'; f.themeNavy2.value = '#14295C'; f.themeBg.value = '#F4F6FB';
   previewTheme(f);
   toast('Cores padrão restauradas — salve para aplicar ↩️', 'ok');
+}
+/* ---------- VITRINE ---------- */
+let VITR = { testimonials: [], gallery: [] };
+async function viewVitrine() {
+  VITR.testimonials = await api('/api/admin/testimonials');
+  VITR.gallery = await api('/api/admin/gallery');
+  paintVitrine();
+}
+function paintVitrine() {
+  const t = VITR.testimonials, g = VITR.gallery;
+  $('#view').innerHTML = `
+    <div class="main-hd"><div><h1>🌟 Vitrine da loja</h1><p>Depoimentos e galeria da página inicial</p></div>
+      <div style="margin-left:auto"><button class="btn" onclick="saveVitrine()">💾 Salvar tudo</button></div></div>
+    <h3>💬 Depoimentos <button class="btn sm ghost" onclick="addDep()">＋ Novo</button></h3>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:18px">${t.map((x, i) => `
+      <div class="panel" style="margin:0;${x.active === false ? 'opacity:.6' : ''}">
+        <div class="row2"><div><label class="lbl">Nome</label><input class="inp" value="${esc(x.name || '')}" oninput="vitSet('testimonials',${i},'name',this.value)"></div>
+        <div><label class="lbl">Detalhe (loja, cidade)</label><input class="inp" value="${esc(x.detail || '')}" oninput="vitSet('testimonials',${i},'detail',this.value)"></div></div>
+        <div style="margin-top:8px"><label class="lbl">Texto</label><input class="inp" value="${esc(x.text || '')}" oninput="vitSet('testimonials',${i},'text',this.value)"></div>
+        <div class="row2" style="margin-top:8px"><div><label class="lbl">Estrelas</label><select class="inp" onchange="vitSet('testimonials',${i},'stars',+this.value)">${[5, 4, 3].map(s => `<option value="${s}" ${x.stars === s ? 'selected' : ''}>${'★'.repeat(s)}</option>`).join('')}</select></div>
+        <div style="display:flex;gap:14px;align-items:end;padding-bottom:10px"><label class="small"><input type="checkbox" ${x.active !== false ? 'checked' : ''} onchange="vitSet('testimonials',${i},'active',this.checked)"> ativo</label><button class="btn sm ghost" onclick="delDep(${i})">🗑️</button></div></div>
+      </div>`).join('') || '<p class="mut">Nenhum depoimento.</p>'}</div>
+    <h3>🖼️ Galeria <button class="btn sm ghost" onclick="addGal()">＋ Novo</button></h3>
+    <div style="display:flex;flex-direction:column;gap:10px">${g.map((x, i) => `
+      <div class="panel" style="margin:0;${x.active === false ? 'opacity:.6' : ''}">
+        <div style="display:grid;grid-template-columns:120px 1fr;gap:14px">
+          <div style="border-radius:12px;min-height:90px;background:#eef;display:grid;place-items:center;overflow:hidden;font-size:32px">${x.img ? `<img src="${x.img}" style="width:100%;height:100%;object-fit:cover">` : '🖼️'}</div>
+          <div>
+            <div class="row2"><div><label class="lbl">Título</label><input class="inp" value="${esc(x.title || '')}" oninput="vitSet('gallery',${i},'title',this.value)"></div>
+            <div><label class="lbl">Etiqueta</label><input class="inp" value="${esc(x.tag || '')}" placeholder="Grande formato" oninput="vitSet('gallery',${i},'tag',this.value)"></div></div>
+            <div class="row2" style="margin-top:8px"><div><label class="lbl">Foto (URL)</label><input class="inp" value="${esc(x.img || '')}" oninput="vitSet('gallery',${i},'img',this.value)"></div>
+            <div><label class="lbl">ou enviar arquivo</label><input type="file" accept="image/*" onchange="vitUpload(${i},this)"></div></div>
+            <div style="margin-top:8px;display:flex;gap:14px;align-items:center"><label class="small"><input type="checkbox" ${x.active !== false ? 'checked' : ''} onchange="vitSet('gallery',${i},'active',this.checked)"> ativo</label><button class="btn sm ghost" onclick="delGal(${i})">🗑️ Excluir</button></div>
+          </div>
+        </div>
+      </div>`).join('') || '<p class="mut">Nenhuma foto.</p>'}</div>`;
+}
+function vitSet(k, i, f, v) { VITR[k][i][f] = v; }
+function addDep() { VITR.testimonials.push({ id: 't-' + Date.now(), name: '', detail: '', text: '', stars: 5, active: true }); paintVitrine(); }
+function delDep(i) { if (confirm('Excluir depoimento?')) { VITR.testimonials.splice(i, 1); paintVitrine(); } }
+function addGal() { VITR.gallery.push({ id: 'g-' + Date.now(), img: '', title: '', tag: '', active: true }); paintVitrine(); }
+function delGal(i) { if (confirm('Excluir foto?')) { VITR.gallery.splice(i, 1); paintVitrine(); } }
+async function vitUpload(i, input) {
+  const f = input.files[0]; if (!f) return;
+  const fd = new FormData(); fd.append('file', f);
+  const res = await fetch('/api/upload', { method: 'POST', body: fd });
+  const r = await res.json();
+  if (!res.ok) return toast(r.error || 'Falha no envio', 'err');
+  VITR.gallery[i].img = r.url; paintVitrine(); toast('Foto enviada! 📸', 'ok');
+}
+async function saveVitrine() {
+  await api('/api/testimonials', { method: 'PUT', body: JSON.stringify({ testimonials: VITR.testimonials }) });
+  await api('/api/gallery', { method: 'PUT', body: JSON.stringify({ gallery: VITR.gallery }) });
+  toast('Vitrine salva! 🌟', 'ok');
 }
 async function testMail() {
   const to = prompt('Enviar e-mail de teste para:', CONFIG.email || '');
