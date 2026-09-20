@@ -157,14 +157,14 @@ function seed() {
       '9x5cm • couché 250g • 500un por R$ 58',
       'Cartão de visita 9x5cm em couché 250g ou 300g, com corte reto, laminação ou verniz localizado. O clássico da gráfica.',
       [{ qty: 250, price: 39 }, { qty: 500, price: 58 }, { qty: 1000, price: 89 }, { qty: 2500, price: 179 }, { qty: 5000, price: 329 }],
-      { badge: 'Mais vendido', sold: 48210, rating: 4.9, papers: CARTAO_PAPER, finishes: FIN_CARTAO,
+      { badge: 'Mais vendido', sold: 48210, rating: 4.9, papers: CARTAO_PAPER, finishes: FIN_CARTAO, finishesMax: 2,
         colors: [{ id: '4x4', label: '4x4 (frente e verso)', mod: 0 }, { id: '4x1', label: '4x1 (verso PB)', mod: -0.08 }, { id: '4x0', label: '4x0 (só frente)', mod: -0.35 }],
         formats: [{ id: '9x5', label: '9x5cm (padrão)', mod: 0 }, { id: '8x5', label: '8x5cm (mini)', mod: -0.1 }] }),
     P('cartao-verniz', 'Cartão com Verniz Localizado', 'cartoes', '✨', ['#3B0B2E', '#A81E7A'],
       '9x5cm • couché 300g • laminação + verniz',
       'Cartão premium em couché 300g com laminação fosca frente e verso + verniz localizado. Sofisticação para marcas exigentes.',
       [{ qty: 250, price: 99 }, { qty: 500, price: 149 }, { qty: 1000, price: 229 }, { qty: 2500, price: 449 }],
-      { badge: 'Premium', papers: CARTAO_PAPER, finishes: FIN_CARTAO,
+      { badge: 'Premium', papers: CARTAO_PAPER, finishes: FIN_CARTAO, finishesMax: 2,
         formats: [{ id: '9x5', label: '9x5cm (padrão)', mod: 0 }] }),
     P('panfleto-10x15', 'Panfletos', 'panfletos', '📰', ['#7A1E00', '#FF5A00'],
       '10x14cm • couché 90g • 1000un 4x0 por R$ 67',
@@ -492,14 +492,14 @@ function calcPrice(product, sel = {}) {
   const q = product.quantities.find(x => String(x.qty) === String(sel.qty)) || product.quantities[0];
   const format = (product.formats || []).find(x => x.id === sel.format);
   const paper = (product.papers || []).find(x => x.id === sel.paper);
-  const finish = (product.finishes || []).find(x => x.id === sel.finish);
+  const _fids = (Array.isArray(sel.finish) ? sel.finish : [sel.finish]).slice(0, product.finishesMax || 1);
   const color = (product.colors || []).find(x => x.id === sel.color);
   const deadline = (product.deadlines || []).find(x => x.id === sel.deadline);
   let total = q.price;
   if (format) total *= (1 + (format.mod || 0));
   if (paper) total *= (1 + (paper.mod || 0));
   if (color) total *= (1 + (color.mod || 0));
-  if (finish) total += (finish.add || 0);
+  _fids.forEach(fid => { const _f = (product.finishes || []).find(x => String(x.id) === String(fid)); if (_f) total += (_f.add || 0); });
   if (deadline) total *= (deadline.mult || 1);
   total = Math.round(total * 100) / 100;
   const _offer = offerPct(product), _old = total;

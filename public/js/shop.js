@@ -97,7 +97,8 @@ function clientPrice(sel) {
   const format = pick(PD.formats, sel.format); if (format) total *= (1 + (format.mod || 0));
   const paper = pick(PD.papers, sel.paper); if (paper) total *= (1 + (paper.mod || 0));
   const color = pick(PD.colors, sel.color); if (color) total *= (1 + (color.mod || 0));
-  const finish = pick(PD.finishes, sel.finish); if (finish) total += (finish.add || 0);
+  const _fids = (Array.isArray(sel.finish) ? sel.finish : [sel.finish]).slice(0, PD.finishesMax || 1);
+  _fids.forEach(fid => { const _f = pick(PD.finishes, fid); if (_f) total += (_f.add || 0); });
   const deadline = pick(PD.deadlines, sel.deadline); if (deadline) total *= (deadline.mult || 1);
   total = Math.round(total * 100) / 100;
   const _offer = offerPct(PD), _old = total;
@@ -110,7 +111,7 @@ function cfgSteps() {
     { key: 'paper', num: '01', title: 'Papel / material', opts: PD.papers || [], label: o => esc(o.label) + modHint(o.mod || 0) },
     { key: 'format', num: '02', title: 'Tamanho', opts: PD.formats || [], label: o => esc(o.label) + modHint(o.mod || 0) },
     { key: 'color', num: '03', title: 'Cores', opts: PD.colors || [], label: o => esc(o.label) + modHint(o.mod || 0) },
-    { key: 'finish', num: '04', title: 'Acabamento', opts: PD.finishes || [], label: o => esc(o.label) + (o.add > 0 ? ` <small class="mut">+${BRL(o.add)}</small>` : o.add < 0 ? ` <small style="color:var(--ok);font-weight:700">−${BRL(-o.add)}</small>` : '') },
+    { key: 'finish', num: '04', title: 'Acabamento' + (PD.finishesMax > 1 ? ` (escolha até ${PD.finishesMax} ✨)` : ''), opts: PD.finishes || [], label: o => esc(o.label) + (o.add > 0 ? ` <small class="mut">+${BRL(o.add)}</small>` : o.add < 0 ? ` <small style="color:var(--ok);font-weight:700">−${BRL(-o.add)}</small>` : '') },
     { key: 'qty', num: '05', title: 'Quantidade', opts: PD.quantities || [], qty: true },
     { key: 'deadline', num: '06', title: 'Prazo de produção', opts: PD.deadlines || [], label: o => `${esc(o.label)} <small class="mut">(${esc(o.days)})</small>` + (((o.mult || 1) > 1) ? ` <small class="mut">+${Math.round(((o.mult || 1) - 1) * 100)}%</small>` : '') },
   ];
@@ -146,7 +147,16 @@ async function pageProduct() {
     <div style="display:flex;gap:8px;margin-top:14px"><button class="btn big block" onclick="pdAdd(true)">🛒 Adicionar ao carrinho</button></div>
     <div style="display:flex;gap:8px;margin-top:8px"><button class="btn navy block" onclick="pdAdd(false)">⚡ Comprar agora</button></div>
     <p class="small mut" style="margin-top:10px">🔒 Compra segura • Você envia a arte no checkout ou depois, na sua conta.</p>`;
-  window.pdSet = (g, v) => { PDSEL[g] = String(v); renderCfg(); };
+  window.pdSet = (g, v) => {
+    if (g === 'finish' && PD.finishesMax > 1) {
+      v = String(v);
+      let a = (Array.isArray(PDSEL.finish) ? PDSEL.finish : [PDSEL.finish]).map(String);
+      if (a.includes(v)) { if (a.length > 1) a = a.filter(x => x !== v); }
+      else { a.push(v); while (a.length > PD.finishesMax) a.shift(); }
+      PDSEL.finish = a;
+    } else PDSEL[g] = String(v);
+    renderCfg();
+  };
   $('#pd-cep').oninput = e => { const d = e.target.value.replace(/\D/g, '').slice(0, 8); e.target.value = d.replace(/(\d{5})(\d)/, '$1-$2'); if (d.length === 8) pdQuote(d); };
   $('#pd-shiptype').onchange = pdNumbers;
   renderCfg();
@@ -167,7 +177,7 @@ function renderCfg() {
       const o = s.opts[0];
       return `<div class="opt">${hd}<div class="pills"><button class="pill on" disabled>${o ? s.label(o) : '—'}</button></div></div>`;
     }
-    const pills = s.opts.map(o => `<button class="pill ${String(PDSEL[s.key]) === String(o.id) ? 'on' : ''}" onclick="pdSet('${s.key}','${o.id}')">${s.label(o)}</button>`).join('');
+    const pills = s.opts.map(o => { const _on = (s.key === 'finish' && PD.finishesMax > 1) ? (Array.isArray(PDSEL.finish) ? PDSEL.finish.map(String) : [String(PDSEL.finish)]).includes(String(o.id)) : String(PDSEL[s.key]) === String(o.id); return `<button class="pill ${_on ? 'on' : ''}" onclick="pdSet('${s.key}','${o.id}')">${s.label(o)}</button>`; }).join('');
     return `<div class="opt">${hd}<div class="pills">${pills}</div></div>`;
   }).join('');
   pdNumbers();
@@ -227,7 +237,7 @@ function pdNumbers() {
   $('#pd-ship').textContent = ship === 0 ? 'GRÁTIS 🎉' : BRL(ship);
 }
 function pdLabel() {
-  const f = n => { const g = { format: PD.formats, paper: PD.papers, color: PD.colors, finish: PD.finishes, deadline: PD.deadlines }[n]; return g?.find(x => String(x.id) === String(PDSEL[n]))?.label || ''; };
+  const f = n => { const g = { format: PD.formats, paper: PD.papers, color: PD.colors, finish: PD.finishes, deadline: PD.deadlines }[n]; if (n === 'finish' && Array.isArray(PDSEL.finish)) return PDSEL.finish.map(fid => g?.find(x => String(x.id) === String(fid))?.label).filter(Boolean).join(' + '); return g?.find(x => String(x.id) === String(PDSEL[n]))?.label || ''; };
   return [f('paper'), f('format'), f('color'), f('finish'), f('deadline')].filter(Boolean).join(' • ');
 }
 async function pdAdd(goCart) {
