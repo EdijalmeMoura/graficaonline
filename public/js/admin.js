@@ -377,7 +377,7 @@ async function viewCoupons() {
   ${list.map(c => `<tr><td><b class="mono">${c.code}</b>${c.firstOnly ? ' <span class="small">🎟️ 1ª compra</span>' : ''}<br><span class="small mut">${esc(c.desc || '')}</span></td>
   <td>${c.type === 'percent' ? c.value + '% OFF' : c.type === 'fixed' ? BRL(c.value) + ' OFF' : '🚚 Frete grátis'}</td><td>${BRL(c.min)}</td><td>${c.used}/${c.maxUses}</td><td>${c.expires || '—'}</td>
   <td>${c.active ? '<span class="badge ok">Ativo</span>' : '<span class="badge mut">Inativo</span>'}</td>
-  <td style="white-space:nowrap"><button class="btn sm ghost" onclick='editCoupon(${JSON.stringify(c.id)})'>✏️</button> <button class="btn sm danger" onclick="delCoupon('${c.id}')">🗑️</button></td></tr>`).join('')}</table></div></div>`;
+  <td style="white-space:nowrap">${c.active ? `<button class="btn sm ghost" title="Desativar" onclick="toggleCoupon('${c.id}')">⏸️</button>` : `<button class="btn sm ghost" title="Ativar" onclick="toggleCoupon('${c.id}')">▶️</button>`} <button class="btn sm ghost" onclick='editCoupon(${JSON.stringify(c.id)})'>✏️</button> <button class="btn sm danger" onclick="delCoupon('${c.id}')">🗑️</button></td></tr>`).join('')}</table></div></div>`;
   window._coupons = list;
 }
 function editCoupon(id) {
@@ -394,12 +394,19 @@ function editCoupon(id) {
 }
 async function saveCoupon(e, id) {
   e.preventDefault(); const f = e.target;
-  const body = { code: f.code.value.toUpperCase(), type: f.type.value, value: Number(f.value.value), min: Number(f.min.value), maxUses: Number(f.maxUses.value), expires: f.expires.value, desc: f.desc.value, active: true, firstOnly: f.firstOnly.checked };
+  const body = { code: f.code.value.toUpperCase(), type: f.type.value, value: Number(f.value.value), min: Number(f.min.value), maxUses: Number(f.maxUses.value), expires: f.expires.value, desc: f.desc.value, active: id ? ((window._coupons || []).find(x => x.id === id)?.active !== false) : true, firstOnly: f.firstOnly.checked };
   if (id) await api(`/api/coupons/${id}`, { method: 'PUT', body: JSON.stringify(body) });
   else await api('/api/coupons', { method: 'POST', body: JSON.stringify(body) });
   closeModal(); toast('Cupom salvo! 🎟️', 'ok'); viewCoupons();
 }
 async function delCoupon(id) { if (!confirm('Excluir cupom?')) return; await api(`/api/coupons/${id}`, { method: 'DELETE' }); viewCoupons(); }
+async function toggleCoupon(id) {
+  const c = (window._coupons || []).find(x => x.id === id);
+  if (!c) return;
+  await api(`/api/coupons/${id}`, { method: 'PUT', body: JSON.stringify({ ...c, active: !c.active }) });
+  toast(c.active ? 'Cupom desativado ⏸️' : 'Cupom ativado! ▶️', 'ok');
+  viewCoupons();
+}
 
 /* ---------- BANNERS ---------- */
 let BANNERS = [];
@@ -566,9 +573,50 @@ async function viewBI() {
   const gPct = Math.min(100, Math.round(mRev / goal * 100));
   const alertRow = (icon, txt, list) => `<div style="display:flex;justify-content:space-between;gap:8px;padding:9px 0;border-bottom:1px solid var(--line);flex-wrap:wrap"><span>${icon} ${txt}</span><b>${list.length ? list.map(o => o.code).slice(0, 4).join(', ') + (list.length > 4 ? ` +${list.length - 4}` : '') : '<span style="color:var(--ok)">tudo certo ✅</span>'}</b></div>`;
   const kpi = (icon, label, val, sub) => `<div class="panel" style="margin:0;text-align:center"><div style="font-size:24px">${icon}</div><div class="small mut">${label}</div><h2 style="margin:4px 0">${val}</h2>${sub || ''}</div>`;
+  const _now = new Date();
+  const _dim = new Date(_now.getFullYear(), _now.getMonth() + 1, 0).getDate();
+  const _elapsed = Math.max(1, _now.getDate() - 1 + (_now.getHours() / 24));
+  const _proj = mRev / _elapsed * _dim;
+  const _cust = {};
+  ORDERS.filter(o => o.status !== 'cancelado').forEach(o => { const k = o.customer?.email || o.customer?.name || '?'; _cust[k] = (_cust[k] || 0) + 1; });
+  const _cn = Object.keys(_cust).length || 1, _rep = Object.values(_cust).filter(n => n > 1).length;
+  const _canc = ORDERS.filter(o => o.status === 'cancelado');
+  const _cancRate = ORDERS.length ? Math.round(_canc.length / ORDERS.length * 100) : 0;
+  const _prod = {};
+  valid.forEach(o => (o.items || []).forEach(it => { const k = it.name || it.productId; const e = _prod[k] = _prod[k] || { name: k, n: 0, v: 0 }; e.n += it.qty || 1; e.v += it.total || (it.qty || 1) * (it.unit || 0); }));
+  const _topP = Object.values(_prod).sort((a, b) => b.v - a.v).slice(0, 5);
+  const _pmax = Math.max(..._topP.map(p => p.v), 1);
+  const _wd = [['Dom', 0], ['Seg', 0], ['Ter', 0], ['Qua', 0], ['Qui', 0], ['Sex', 0], ['Sáb', 0]];
+  valid.forEach(o => { _wd[new Date(o.createdAt).getDay()][1]++; });
+  const _wmax = Math.max(..._wd.map(w => w[1]), 1);
+  const _bestWd = _wd.reduce((x, b) => b[1] > x[1] ? b : x);
+  const _uf = {};
+  valid.forEach(o => { const u = o.address?.state || '—'; _uf[u] = (_uf[u] || 0) + o.total; });
+  const _topUf = Object.entries(_uf).sort((x, b) => b[1] - x[1]).slice(0, 5);
+  const _umax = Math.max(..._topUf.map(u => u[1]), 1);
+  const _cyc = ORDERS.filter(o => (o.timeline || []).some(t => t.status === 'entregue'));
+  const _avgCyc = _cyc.length ? _cyc.reduce((s, o) => s + (new Date(o.timeline.find(t => t.status === 'entregue').at) - new Date(o.createdAt)) / 864e5, 0) / _cyc.length : 0;
+  const _ins = [];
+  if (_topP.length) _ins.push(`🏆 <b>${esc(_topP[0].name)}</b> é o carro-chefe (${BRL(Math.round(_topP[0].v))} no período).`);
+  if (_bestWd[1]) _ins.push(`📅 <b>${_bestWd[0]}</b> concentra os pedidos — reforce produção e atendimento.`);
+  if (_rep) _ins.push(`🔁 <b>${Math.round(_rep / _cn * 100)}%</b> dos clientes já recompraram — régua de recompra vale ouro.`);
+  if (_cancRate > 5) _ins.push(`⚠️ Cancelamento em <b>${_cancRate}%</b> — revise arte e prazo nos cancelados.`);
+  if (_proj > goal && mRev < goal) _ins.push(`🔮 No ritmo atual você <b>bate a meta</b> (${BRL(Math.round(_proj))} projetados).`);
+  if (payPendV > 0) _ins.push(`💳 <b>${BRL(Math.round(payPendV))}</b> a receber — cobre os pendentes hoje.`);
+  if (!_ins.length) _ins.push('📊 Poucos dados no período — bora vender! 🚀');
+  const _bar = (pct, c) => `<div style="height:8px;background:var(--bg);border-radius:99px;margin-top:3px"><div style="height:100%;width:${pct}%;background:${c};border-radius:99px"></div></div>`;
+  const biExtra = `
+    <div class="grid2" style="margin-top:16px">
+      <div class="panel"><h3>🧠 Insights automáticos</h3>${_ins.map(i => `<div style="padding:9px 0;border-bottom:1px solid var(--line);font-size:14px">${i}</div>`).join('')}</div>
+      <div class="panel"><h3>🏆 Top produtos (período)</h3>${_topP.length ? _topP.map(p => `<div style="margin:8px 0;font-size:13px"><div style="display:flex;justify-content:space-between"><span><b>${esc(p.name)}</b> <span class="mut">×${p.n}</span></span><b>${BRL(Math.round(p.v))}</b></div>${_bar(Math.round(p.v / _pmax * 100), 'linear-gradient(90deg,var(--primary),var(--navy))')}</div>`).join('') : '<p class="mut">—</p>'}</div>
+    </div>
+    <div class="grid2" style="margin-top:16px">
+      <div class="panel"><h3>📅 Pedidos por dia da semana</h3><div style="display:flex;align-items:end;gap:6px;height:130px;margin-top:8px">${_wd.map(w => `<div style="flex:1;text-align:center"><div style="font-size:11px;font-weight:800">${w[1] || ''}</div><div style="height:${Math.max(4, Math.round(w[1] / _wmax * 90))}px;background:${w[1] === _wmax && w[1] ? 'var(--primary)' : 'var(--navy)'};opacity:${w[1] ? 1 : .25};border-radius:6px 6px 0 0"></div><div style="font-size:11px" class="mut">${w[0]}</div></div>`).join('')}</div></div>
+      <div class="panel"><h3>🗺️ Receita por estado</h3>${_topUf.map(([u, v]) => `<div style="margin:8px 0;font-size:13px"><div style="display:flex;justify-content:space-between"><b>${esc(u)}</b><b>${BRL(Math.round(v))}</b></div>${_bar(Math.round(v / _umax * 100), 'linear-gradient(90deg,#16A34A,#4ADE80)')}</div>`).join('') || '<p class="mut">—</p>'}</div>
+    </div>`;
   $('#view').innerHTML = `
     <div class="main-hd"><div><h1>📊 BI Gerencial</h1><p>Período: ${[7, 30, 90].map(d => `<button class="btn sm ${BI_DAYS === d ? 'navy' : 'ghost'}" onclick="BI_DAYS=${d};viewBI()">${d}d</button>`).join(' ')} <button class="btn sm ${!BI_DAYS ? 'navy' : 'ghost'}" onclick="BI_DAYS=0;viewBI()">tudo</button> <span class="small mut">• atualizado às ${new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></p></div>
-    <button class="btn navy" style="margin-left:auto" onclick="window.print()">🖨️ Imprimir</button></div>
+    <div style="margin-left:auto;display:flex;gap:8px"><button class="btn ghost" onclick="biCSV()">⬇️ CSV</button><button class="btn navy" style="margin-left:auto" onclick="window.print()">🖨️ Imprimir</button></div></div>
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:14px">
       ${kpi('💰', 'Faturamento', BRL(Math.round(rev * 100) / 100), `<small class="mut">${valid.length} pedidos</small><br>${biDelta(rev, prevRev)}`)}
       ${kpi('🏭', 'Pedidos ativos', open.length, `<small class="mut">em andamento</small><br>${biDelta(valid.length, prev.length)}`)}
@@ -576,6 +624,10 @@ async function viewBI() {
       ${kpi('🚚', 'Tempo até envio', sent.length ? avgShip.toFixed(1) + ' dias' : '—', '')}
       ${kpi('⭐', 'Satisfação', allRev.length ? sat.toFixed(1) : '—', `<small class="mut">${allRev.length} avaliações</small>`)}
       ${kpi('💳', 'A receber', BRL(Math.round(payPendV * 100) / 100), `<small class="mut">${payPend.length} pedido(s)</small>`)}
+      ${kpi('🔮', 'Projeção do mês', BRL(Math.round(_proj)), `<small class="mut">${_proj >= goal ? '🏆 bate a meta!' : Math.round(_proj / goal * 100) + '% da meta'}</small>`)}
+      ${kpi('🔁', 'Recompra', Math.round(_rep / _cn * 100) + '%', `<small class="mut">${_rep} de ${_cn} clientes</small>`)}
+      ${kpi('⏱️', 'Ciclo até entrega', _cyc.length ? _avgCyc.toFixed(1) + ' dias' : '—', `<small class="mut">${_cyc.length} entregues</small>`)}
+      ${kpi('💸', 'Cancelamento', _cancRate + '%', `<small class="mut">${_canc.length} pedido(s)</small>`)}
     </div>
     <div class="grid2">
       <div class="panel"><h3>🔄 Funil de processos</h3>
@@ -593,6 +645,7 @@ async function viewBI() {
       </div>
     </div>
     <div class="grid2" style="margin-top:16px">
+    ${biExtra}
       <div class="panel"><h3>🎯 Meta do mês — ${BRL(goal)}</h3>
         <div style="height:22px;background:var(--bg);border-radius:99px;overflow:hidden"><div style="height:100%;width:${gPct}%;background:linear-gradient(90deg,#16A34A,#4ADE80);border-radius:99px;transition:.5s"></div></div>
         <p style="margin:8px 0 0"><b>${gPct}%</b> • ${BRL(Math.round(mRev * 100) / 100)} de ${BRL(goal)} ${mRev >= goal ? '🏆 <b>Meta batida!</b>' : `• faltam <b>${BRL(Math.round((goal - mRev) * 100) / 100)}</b>`}</p>
@@ -600,6 +653,18 @@ async function viewBI() {
       </div>
       <div class="panel"><h3>👑 Top clientes</h3>${topCli.length ? `<div style="overflow:auto"><table class="tbl"><tr><th>Cliente</th><th>Pedidos</th><th>Total</th></tr>${topCli.map(t => `<tr><td><b>${esc(t.name)}</b></td><td>${t.n}</td><td><b>${BRL(Math.round(t.v * 100) / 100)}</b></td></tr>`).join('')}</table></div>` : '<p class="mut">—</p>'}</div>
     </div>`;
+}
+
+function biCSV() {
+  const span = BI_DAYS ? BI_DAYS * 864e5 : 0;
+  const cutoff = span ? Date.now() - span : 0;
+  const rows = ORDERS.filter(o => !cutoff || new Date(o.createdAt).getTime() >= cutoff);
+  const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const csv = ['codigo;data;cliente;email;total;status;pagamento'].concat(rows.map(o => [o.code, new Date(o.createdAt).toLocaleDateString('pt-BR'), o.customer?.name, o.customer?.email, o.total.toFixed(2).replace('.', ','), o.status, o.payment?.method].map(q).join(';'))).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' }));
+  a.download = 'pedidos-bi.csv'; a.click();
+  toast(`${rows.length} pedidos exportados! ⬇️`, 'ok');
 }
 
 /* ---------- Gabaritos ---------- */
