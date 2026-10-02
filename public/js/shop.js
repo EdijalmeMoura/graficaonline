@@ -14,6 +14,7 @@ async function initShop() {
     if (page === 'checkout') await pageCheckout();
     if (page === 'auth') pageAuth();
     if (page === 'doc') pageDoc();
+    if (page === 'quote') pageQuote();
   } catch (e) { console.error(e); toast(e.message, 'err'); }
 }
 
@@ -487,6 +488,46 @@ async function ckFinish() {
 async function notifyPaid(orderId) {
   try { await api(`/api/orders/${orderId}/notify-payment`, { method: 'POST' }); toast('Valeu! Vamos confirmar e liberar seu pedido 🙏', 'ok'); location.href = '/conta.html#/pedidos'; }
   catch (e) { toast(e.message, 'err'); }
+}
+
+/* ---------- ORÇAMENTO ---------- */
+function pageQuote() {
+  window.quoteUpload = async (input) => {
+    const f = input.files[0]; if (!f) return;
+    toast('Enviando arquivo... 📎');
+    try {
+      const fd = new FormData(); fd.append('file', f);
+      const r = await fetch('/api/upload', { method: 'POST', body: fd });
+      const up = await r.json();
+      if (!r.ok) throw new Error(up.error || 'Falha no envio');
+      document.querySelector('#q-file').value = up.url;
+      document.querySelector('#q-filelbl').textContent = '📎 ' + (up.name || f.name);
+      toast('Arquivo anexado! ✅', 'ok');
+    } catch (e) { toast(e.message, 'err'); }
+  };
+  window.sendQuote = async (e) => {
+    e.preventDefault();
+    const f = e.target;
+    try {
+      const r = await api('/api/quotes', { method: 'POST', body: JSON.stringify({ name: f.qname.value, email: f.qemail.value, phone: f.qphone.value, product: f.qprod.value, qty: f.qqtd.value, desc: f.qdesc.value, file: f.qfile.value }) });
+      document.querySelector('#quote-ok').innerHTML = `<div style="background:#F0FDF4;border:1.5px solid #16A34A;border-radius:12px;padding:16px;margin-top:12px;text-align:center"><h3 style="margin:0">✅ Recebido!</h3><p>Seu código: <b class="mono" style="font-size:20px">${r.code}</b></p><p class="small mut">Respondemos rapidinho. Consulte o andamento abaixo com o código + e-mail 👇</p></div>`;
+      f.reset(); document.querySelector('#q-filelbl').textContent = '';
+      toast('Orçamento enviado! 💰', 'ok');
+    } catch (err) { toast(err.message, 'err'); }
+  };
+  window.findQuote = async (e) => {
+    e.preventDefault();
+    const f = e.target, box = document.querySelector('#quote-res');
+    const stName = { open: '⏳ Recebido — em análise', quoted: '💰 Respondido!', approved: '✅ Aprovado', declined: '❌ Recusado' };
+    try {
+      const q = await api(`/api/quotes/${encodeURIComponent(f.qcode.value.trim())}?email=${encodeURIComponent(f.qemail2.value.trim())}`);
+      box.innerHTML = `<div class="panel" style="margin:12px 0 0"><h3>${q.code} — ${stName[q.status] || q.status}</h3>
+        <p class="small"><b>${esc(q.product || 'Sob medida')}</b> • ${esc(q.qty || '')} • pedido em ${fmtDate(q.createdAt)}</p>
+        <p class="small mut">${esc(q.desc || '')}</p>
+        ${q.status === 'quoted' ? `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:10px;padding:12px"><b style="font-size:22px">${BRL(q.price || 0)}</b> <span class="small mut">• prazo: ${esc(q.deadline || 'a combinar')}</span>${q.note ? `<br><span class="small">💬 ${esc(q.note)}</span>` : ''}<br><br><a class="btn" target="_blank" href="https://wa.me/${CONFIG.whatsapp || '5581996365068'}?text=${encodeURIComponent('Olá! Quero fechar o orçamento ' + q.code + ' 💰')}">Fechar no WhatsApp ✅</a></div>` : ''}
+        ${q.status === 'open' ? '<p class="small">⏳ Nossa equipe está analisando. Volte em breve!</p>' : ''}</div>`;
+    } catch (err) { box.innerHTML = `<p class="mut" style="margin-top:10px">⚠️ ${esc(err.message)}</p>`; }
+  };
 }
 
 /* ---------- AUTH ---------- */

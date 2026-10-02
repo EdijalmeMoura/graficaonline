@@ -24,6 +24,7 @@ function renderSide(active, badges = {}) {
       <a href="#/clientes" class="${active === 'clientes' ? 'on' : ''}">👥 Clientes</a>
       <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
       <a href="#/leads" class="${active === 'leads' ? 'on' : ''}">🛒 Carrinhos</a>
+      <a href="#/quotes" class="${active === 'quotes' ? 'on' : ''}">💰 Orçamentos</a>
       <a href="#/pagamentos" class="${active === 'pagamentos' ? 'on' : ''}">💳 Pagamentos</a>
       <a href="#/banners" class="${active === 'banners' ? 'on' : ''}">🖼️ Banners</a>
       <a href="#/vitrine" class="${active === 'vitrine' ? 'on' : ''}">🌟 Vitrine</a>
@@ -53,6 +54,7 @@ async function route() {
     if (path === 'clientes') return viewCustomers();
     if (path === 'cupons') return viewCoupons();
     if (path === 'leads') return viewLeads();
+    if (path === 'quotes') return viewQuotes();
     if (path === 'pagamentos') return viewPayments();
     if (path === 'banners') return viewBanners();
     if (path === 'vitrine') return viewVitrine();
@@ -393,6 +395,43 @@ function waRecover(id) {
   api(`/api/leads/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'contacted' }) }).then(() => viewLeads());
 }
 async function leadDone(id) { await api(`/api/leads/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'converted' }) }); viewLeads(); }
+const QST = { open: '⏳ recebido', quoted: '💰 respondido', approved: '✅ aprovado', declined: '❌ recusado' };
+async function viewQuotes() {
+  const list = await api('/api/admin/quotes');
+  const open = list.filter(q => q.status === 'open').length;
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>💰 Orçamentos</h1><p>${open} aguardando resposta</p></div></div>
+  <div class="panel"><div style="overflow:auto"><table class="tbl"><tr><th>Código</th><th>Cliente</th><th>Produto</th><th>Quando</th><th>Status</th><th></th></tr>
+  ${list.map(q => `<tr><td><b class="mono">${q.code}</b></td><td><b>${esc(q.name)}</b><br><span class="small mut">${esc(q.email)}</span></td>
+  <td class="small">${esc(q.product || '—')}<br><span class="mut">${esc(q.qty || '')}</span></td><td class="small">${fmtDT(q.createdAt)}</td>
+  <td><span class="badge ${q.status === 'open' ? 'sale' : q.status === 'quoted' ? '' : q.status === 'approved' ? 'ok' : 'mut'}">${QST[q.status] || q.status}</span></td>
+  <td style="white-space:nowrap"><button class="btn sm" onclick="qModal('${q.id}')">Responder</button> <button class="btn sm danger" onclick="delQuote('${q.id}')">🗑️</button></td></tr>`).join('') || '<tr><td colspan="6" class="mut">Nenhum orçamento 🎉</td></tr>'}</table></div></div>`;
+  window._quotes = list;
+}
+function qModal(id) {
+  const q = (window._quotes || []).find(x => x.id === id);
+  openModal(`<div class="mh"><h3 style="margin:0">💰 ${q.code} — ${esc(q.name)}</h3><button class="btn sm ghost" onclick="closeModal()">✕</button></div>
+  <div class="mb"><p class="small"><b>${esc(q.product || 'Sob medida')}</b> • ${esc(q.qty || '')} • 📞 ${esc(q.phone || '—')}</p>
+  <p class="small mut">${esc(q.desc || '')}</p>
+  ${q.file ? `<p class="small">📎 <a class="link-more" href="${q.file}" target="_blank">ver anexo</a></p>` : ''}
+  <form onsubmit="saveQuote(event,'${q.id}')">
+  <div class="row2"><div><label class="lbl">Preço (R$)</label><input class="inp" name="price" type="number" step="0.01" value="${q.price || ''}" placeholder="0.00"></div>
+  <div><label class="lbl">Prazo</label><input class="inp" name="deadline" value="${esc(q.deadline || '')}" placeholder="Ex: 5 dias úteis"></div></div>
+  <div style="margin-top:8px"><label class="lbl">Recado p/ o cliente</label><input class="inp" name="note" value="${esc(q.note || '')}" placeholder="Ex: frete incluso, arte grátis..."></div>
+  <div style="margin-top:8px"><label class="lbl">Status</label><select class="inp" name="status">${Object.entries(QST).map(([k, v]) => `<option value="${k}" ${q.status === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
+  <div style="display:flex;gap:8px;margin-top:12px"><button class="btn block">Salvar ✅</button><button type="button" class="btn navy" onclick="waQuote('${q.id}')">📲 WhatsApp</button></div></form></div>`);
+}
+async function saveQuote(e, id) {
+  e.preventDefault(); const f = e.target;
+  await api(`/api/quotes/${id}`, { method: 'PUT', body: JSON.stringify({ price: Number(f.price.value) || null, deadline: f.deadline.value, note: f.note.value, status: f.status.value }) });
+  closeModal(); toast('Orçamento atualizado! 💰', 'ok'); viewQuotes();
+}
+function waQuote(id) {
+  const q = (window._quotes || []).find(x => x.id === id);
+  const num = waNum(q?.phone);
+  if (!num) { toast('Cliente sem telefone', 'err'); return; }
+  window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(`Olá ${q.name}! Aqui é da ${CONFIG.storeName || 'PrimePrint'} 🖨️ Sobre seu orçamento ${q.code} (${q.product || 'sob medida'}): ${q.price ? 'fica ' + BRL(q.price) + (q.deadline ? ', prazo ' + q.deadline : '') + '. ' : ''}Vamos fechar? ✅`), '_blank');
+}
+async function delQuote(id) { if (!confirm('Excluir orçamento?')) return; await api(`/api/quotes/${id}`, { method: 'DELETE' }); viewQuotes(); }
 async function viewCoupons() {
   const list = await api('/api/coupons');
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🎟️ Cupons</h1></div><button class="btn" style="margin-left:auto" onclick="editCoupon()">＋ Novo cupom</button></div>

@@ -465,7 +465,7 @@ function seed() {
     { id: 'g5', img: '/img/products/folder-a4.jpg', title: 'Folders', tag: 'Divulgação', active: true },
     { id: 'g6', img: '/img/products/calendario-mesa.jpg', title: 'Calendários de mesa', tag: 'Brindes', active: true },
   ];
-  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, testimonials, gallery, templates, messages: [], leads: [], config };
+  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, testimonials, gallery, templates, messages: [], leads: [], quotes: [], config };
 }
 
 /* ---------------- Auth helpers ---------------- */
@@ -703,6 +703,30 @@ app.post('/api/shipping/quote', async (req, res) => {
 app.get('/api/admin/shipping', auth, admin, (req, res) => {
   const c = loadDB().config;
   res.json({ meActive: !!(c.meEnabled && (c.meToken || process.env.ME_TOKEN)), hasToken: !!(c.meToken || process.env.ME_TOKEN) });
+});
+app.post('/api/quotes', (req, res) => {
+  const db = loadDB(); db.quotes = db.quotes || [];
+  const { name = '', email = '', phone = '', product = '', qty = '', desc = '', file = '' } = req.body;
+  if (!name.trim() || !String(email).includes('@') || !desc.trim()) return res.status(400).json({ error: 'Preencha nome, e-mail e descrição' });
+  const q = { id: uid('q-'), code: 'Q-' + Date.now().toString(36).toUpperCase().slice(-6), name: name.trim(), email: email.trim(), phone: phone.trim(), product, qty, desc: desc.trim(), file, price: null, deadline: '', note: '', status: 'open', createdAt: new Date().toISOString() };
+  db.quotes.push(q); saveDB();
+  res.json({ ok: true, code: q.code });
+});
+app.get('/api/quotes/:code', (req, res) => {
+  const q = (loadDB().quotes || []).find(x => x.code === String(req.params.code).toUpperCase());
+  if (!q || q.email.toLowerCase() !== String(req.query.email || '').toLowerCase()) return res.status(404).json({ error: 'Orçamento não encontrado' });
+  res.json(q);
+});
+app.get('/api/admin/quotes', auth, admin, (req, res) => res.json((loadDB().quotes || []).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))));
+app.put('/api/quotes/:id', auth, admin, (req, res) => {
+  const q = (loadDB().quotes || []).find(x => x.id === req.params.id);
+  if (!q) return res.status(404).json({ error: 'Não encontrado' });
+  ['price', 'deadline', 'note', 'status'].forEach(f => { if (req.body[f] !== undefined) q[f] = req.body[f]; });
+  saveDB(); res.json({ ok: true });
+});
+app.delete('/api/quotes/:id', auth, admin, (req, res) => {
+  const db = loadDB(); db.quotes = (db.quotes || []).filter(x => x.id !== req.params.id);
+  saveDB(); res.json({ ok: true });
 });
 app.post('/api/leads', (req, res) => {
   const db = loadDB(); db.leads = db.leads || [];

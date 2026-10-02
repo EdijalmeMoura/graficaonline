@@ -150,6 +150,7 @@ function renderHeader() {
     <a href="/produtos.html">📂 Todas as categorias</a>
     ${CATS.slice(0, 9).map(c => `<a href="/produtos.html?cat=${c.id}">${c.icon} ${esc(c.name)}</a>`).join('')}
     <a class="hl" href="/pagina.html?p=gabaritos">📐 Gabaritos</a>
+    <a class="hl" href="/orcamento.html">💰 Orçamento</a>
   </div></nav>
 `;
   updateCartBadge();
@@ -172,7 +173,7 @@ function renderFooter() {
     <div><h4>${(CONFIG.storeName || 'PrimePrint').toUpperCase()}</h4>
       <a href="/index.html">Início</a><a href="/produtos.html">Produtos</a>
       <a href="/conta.html">Sua conta</a><a href="/conta.html#/pedidos">Meus pedidos</a>
-      <a href="/pagina.html?p=gabaritos">Gabaritos</a><a href="/pagina.html?p=criacao-e-envio">Criação e envio</a></div>
+      <a href="/pagina.html?p=gabaritos">Gabaritos</a><a href="/orcamento.html">💰 Orçamento</a><a href="/pagina.html?p=criacao-e-envio">Criação e envio</a></div>
     <div><h4>INSTITUCIONAL</h4>
       <a href="/pagina.html?p=duvidas">Dúvidas frequentes</a><a href="/pagina.html?p=quem-somos">Quem somos</a>
       <a href="/pagina.html?p=contato">Fale conosco</a><a href="/pagina.html?p=como-funciona">Como funciona</a></div>
@@ -249,3 +250,6 @@ async function uploadFile(file) {
   if (!res.ok) throw new Error(data.error || 'Falha no upload');
   return data;
 }
+
+/* PWA */
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));

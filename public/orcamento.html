@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Solicitar orçamento — PrimePrint Gráfica Online</title><meta name="description" content="Peça um orçamento sob medida: descreva o que precisa e receba preço e prazo rapidinho."><meta name="theme-color" content="#0B1E3B">
+<link rel="manifest" href="/manifest.json"><link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+<link rel="stylesheet" href="/css/style.css?v=36"></head>
+<body data-page="quote">
+<div id="site-header"></div>
+<div class="wrap">
+  <section class="block"><div class="sec-hd"><div><h2>💰 Orçamento sob medida</h2><p>Algo fora do catálogo? Descreva — respondemos rapidinho</p></div></div>
+  <div class="card"><form onsubmit="sendQuote(event)">
+    <div class="row2"><div><label class="lbl">Seu nome *</label><input class="inp" name="qname" required placeholder="Como podemos te chamar?"></div>
+    <div><label class="lbl">WhatsApp</label><input class="inp" name="qphone" inputmode="tel" placeholder="(81) 99999-9999"></div></div>
+    <div style="margin-top:8px"><label class="lbl">E-mail *</label><input class="inp" name="qemail" type="email" required placeholder="Para acompanhar com o código"></div>
+    <div class="row2" style="margin-top:8px"><div><label class="lbl">Tipo de produto</label><select class="inp" name="qprod"><option>Cartões</option><option>Panfletos / Folders</option><option>Banners / Faixas</option><option>Adesivos / Rótulos</option><option>Papelaria</option><option>Outro</option></select></div>
+    <div><label class="lbl">Quantidade</label><input class="inp" name="qqtd" placeholder="Ex: 1000 un"></div></div>
+    <div style="margin-top:8px"><label class="lbl">Descreva o que precisa *</label><textarea class="inp" name="qdesc" rows="4" required placeholder="Tamanho, papel, cores, acabamento, prazo... quanto mais detalhe, mais rápido respondemos!"></textarea></div>
+    <div style="margin-top:8px"><label class="lbl">Anexo (opcional — arte de referência, modelo...)</label><input type="file" id="q-up" hidden onchange="quoteUpload(this)"><input type="hidden" name="qfile" id="q-file"><button type="button" class="btn sm navy" onclick="document.querySelector('#q-up').click()">📎 Anexar arquivo</button> <span class="small mut" id="q-filelbl"></span></div>
+    <button class="btn big block" style="margin-top:12px">Solicitar orçamento 💰</button></form><div id="quote-ok"></div></div></section>
+  <section class="block"><div class="sec-hd"><div><h2>🔍 Consultar orçamento</h2><p>Já pediu? Acompanhe com o código</p></div></div>
+  <div class="card"><form onsubmit="findQuote(event)" style="display:flex;gap:8px;flex-wrap:wrap"><input class="inp mono" name="qcode" required placeholder="Código (ex: Q-ABC123)" style="flex:1;min-width:160px"><input class="inp" name="qemail2" type="email" required placeholder="Seu e-mail" style="flex:2;min-width:200px"><button class="btn">Consultar 🔍</button></form><div id="quote-res"></div></div></section>
+</div>
+<div id="site-footer"></div>
+<script src="/js/app.js?v=36"></script><script src="/js/shop.js?v=36"></script>
+</body></html>
