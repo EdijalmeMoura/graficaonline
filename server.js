@@ -738,6 +738,15 @@ app.post('/api/leads', (req, res) => {
   saveDB(); res.json({ ok: true });
 });
 app.get('/api/admin/leads', auth, admin, (req, res) => res.json((loadDB().leads || []).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))));
+app.post('/api/leads/:id/email', auth, admin, async (req, res) => {
+  const l = (loadDB().leads || []).find(x => x.id === req.params.id);
+  if (!l) return res.status(404).json({ error: 'Lead não encontrado' });
+  const base = publicBase();
+  const items = (l.items || []).map(i => `• ${escHtml(i.name)} — ${money(i.total)}`).join('<br>') || 'seu carrinho';
+  const r = await sendMail({ to: l.email, subject: 'Esqueceu algo? Seu carrinho te espera 🛒 (+10% OFF)', title: `Seu carrinho te espera${l.name ? ', ' + escHtml(l.name.split(' ')[0]) : ''}! 🛒`, body: `<p>Você montou um pedido e não finalizou:</p><p>${items}</p><p><b>Total: ${money(l.total)}</b></p><p>🎟️ Use o cupom <b>VOLTA10</b> e ganhe <b>10% OFF</b>!</p>${base ? `<p style="text-align:center"><a href="${base}/checkout.html" style="background:#F26522;color:#fff;text-decoration:none;font-weight:700;padding:13px 26px;border-radius:10px">Finalizar minha compra →</a></p>` : ''}` });
+  if (r.sent) { l.status = 'contacted'; saveDB(); }
+  res.json(r);
+});
 app.put('/api/leads/:id', auth, admin, (req, res) => {
   const l = (loadDB().leads || []).find(x => x.id === req.params.id);
   if (!l) return res.status(404).json({ error: 'Lead não encontrado' });

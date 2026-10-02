@@ -384,7 +384,7 @@ async function viewLeads() {
   ${list.map(l => `<tr><td><b>${esc(l.name || '—')}</b><br><span class="small mut">${esc(l.email)}</span>${l.phone ? `<br><span class="small">${esc(l.phone)}</span>` : ''}</td>
   <td class="small">${(l.items || []).map(i => esc(i.name)).join('<br>') || '—'}</td><td><b>${BRL(l.total || 0)}</b></td><td class="small">${fmtDT(l.updatedAt)}</td>
   <td>${l.status === 'open' ? '<span class="badge sale">⏳ aberto</span>' : l.status === 'contacted' ? '<span class="badge">📲 contatado</span>' : '<span class="badge ok">✅ convertido</span>'}</td>
-  <td style="white-space:nowrap">${l.status === 'open' ? `<button class="btn sm navy" onclick="waRecover('${l.id}')">📲 Recuperar</button> <button class="btn sm ghost" onclick="leadDone('${l.id}')">✅</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="mut">Nenhum carrinho abandonado 🎉</td></tr>'}</table></div></div>`;
+  <td style="white-space:nowrap">${l.status === 'open' ? `<button class="btn sm navy" onclick="waRecover('${l.id}')">📲 Recuperar</button> <button class="btn sm navy" onclick="leadEmail('${l.id}')">📧 E-mail</button> <button class="btn sm ghost" onclick="leadDone('${l.id}')">✅</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="mut">Nenhum carrinho abandonado 🎉</td></tr>'}</table></div></div>`;
   window._leads = list;
 }
 function waRecover(id) {
@@ -393,6 +393,16 @@ function waRecover(id) {
   if (!num) { toast('Lead sem telefone', 'err'); return; }
   window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(`Olá ${l.name || ''}! Aqui é da ${CONFIG.storeName || 'PrimePrint'} 🖨️ Vi que você montou um pedido de ${BRL(l.total || 0)} e não finalizou. Posso ajudar? Use VOLTA10 e ganhe 10% OFF 👉 ${location.origin}/checkout.html`), '_blank');
   api(`/api/leads/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'contacted' }) }).then(() => viewLeads());
+}
+async function leadEmail(id) {
+  try {
+    toast('Enviando e-mail... 📧');
+    const r = await api(`/api/leads/${id}/email`, { method: 'POST' });
+    if (r.sent) toast('E-mail enviado! 📧', 'ok');
+    else if (r.skipped) toast('SMTP não configurado — ative em ⚙️ Configurações', 'err');
+    else toast('Falha: ' + (r.error || 'tente de novo'), 'err');
+    viewLeads();
+  } catch (e) { toast(e.message, 'err'); }
 }
 async function leadDone(id) { await api(`/api/leads/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'converted' }) }); viewLeads(); }
 const QST = { open: '⏳ recebido', quoted: '💰 respondido', approved: '✅ aprovado', declined: '❌ recusado' };
