@@ -398,6 +398,7 @@ function seed() {
 
   const coupons = [
     { id: 'c1', code: 'BEMVINDO10', type: 'percent', value: 10, min: 100, maxUses: 500, used: 37, expires: '2026-12-31', active: true, firstOnly: true, desc: '10% OFF na primeira compra acima de R$ 100' },
+    { id: 'c-volta', code: 'VOLTA10', type: 'percent', value: 10, min: 50, maxUses: 1000, used: 0, expires: '2026-12-31', active: true, desc: '10% OFF para recuperar carrinho' },
     { id: 'c2', code: 'PRINT15', type: 'percent', value: 15, min: 300, maxUses: 200, used: 12, expires: '2026-12-31', active: true, desc: '15% OFF em compras acima de R$ 300' },
     { id: 'c3', code: 'FRETEGRATIS', type: 'freeship', value: 0, min: 299, maxUses: 1000, used: 210, expires: '2026-12-31', active: true, desc: 'Frete grátis acima de R$ 299' },
   ];
@@ -434,7 +435,7 @@ function seed() {
   const config = {
     storeName: 'PrimePrint', phone: '(81) 99636-5068', whatsapp: '5581996365068',
     email: 'vendas@primeprint.com.br', hours: 'Seg a Sex, 9h às 18h',
-    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: 'edijalmemoura@gmail.com', pixName: 'edijalme S. de Moura', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', meSandbox: false, meName: '', mePhone: '', meEmail: '', meDoc: '', meStreet: '', meNumber: '', meDistrict: '', meCity: '', meState: '', meIE: '', themePrimary: '#FF4D00', themePrimary2: '#FF7A00', themeNavy: '#0A1633', themeNavy2: '#14295C', themeBg: '#F4F6FB', monthlyGoal: 30000, mailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', smtpFrom: '',
+    freeShipFrom: 299, shipPAC: 19.9, shipSEDEX: 29.9, pixDiscount: 5, installmentMax: 6, payPix: true, payCard: true, payBoleto: true, payInfinite: true, pixKey: 'edijalmemoura@gmail.com', pixName: 'edijalme S. de Moura', mpEnabled: false, mpToken: '', stoneEnabled: false, stoneToken: '', infpayEnabled: false, infpayToken: '', infpayHandle: '', publicUrl: '', shipOriginZip: '', pkgWeight: 1, pkgWidth: 20, pkgHeight: 10, pkgLength: 30, meEnabled: false, meToken: '', meSandbox: false, meName: '', mePhone: '', meEmail: '', meDoc: '', meStreet: '', meNumber: '', meDistrict: '', meCity: '', meState: '', meIE: '', themePrimary: '#FF4D00', themePrimary2: '#FF7A00', themeNavy: '#0A1633', themeNavy2: '#14295C', themeBg: '#F4F6FB', googleReviewUrl: '', monthlyGoal: 30000, mailEnabled: false, smtpHost: '', smtpPort: 587, smtpUser: '', smtpPass: '', smtpFrom: '',
   };
 
   const templates = [
@@ -464,7 +465,7 @@ function seed() {
     { id: 'g5', img: '/img/products/folder-a4.jpg', title: 'Folders', tag: 'Divulgação', active: true },
     { id: 'g6', img: '/img/products/calendario-mesa.jpg', title: 'Calendários de mesa', tag: 'Brindes', active: true },
   ];
-  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, testimonials, gallery, templates, messages: [], config };
+  return { seq: { order: 1004 }, categories, products, users, orders, coupons, banners, testimonials, gallery, templates, messages: [], leads: [], config };
 }
 
 /* ---------------- Auth helpers ---------------- */
@@ -703,6 +704,22 @@ app.get('/api/admin/shipping', auth, admin, (req, res) => {
   const c = loadDB().config;
   res.json({ meActive: !!(c.meEnabled && (c.meToken || process.env.ME_TOKEN)), hasToken: !!(c.meToken || process.env.ME_TOKEN) });
 });
+app.post('/api/leads', (req, res) => {
+  const db = loadDB(); db.leads = db.leads || [];
+  const { email = '', name = '', phone = '', items = [], total = 0 } = req.body;
+  if (!email || !String(email).includes('@')) return res.status(400).json({ error: 'E-mail inválido' });
+  let l = db.leads.find(x => x.email.toLowerCase() === String(email).toLowerCase() && x.status === 'open');
+  if (l) { l.name = name || l.name; l.phone = phone || l.phone; l.items = items; l.total = total; l.updatedAt = new Date().toISOString(); }
+  else { l = { id: uid('l-'), email, name, phone, items, total, status: 'open', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() }; db.leads.push(l); }
+  saveDB(); res.json({ ok: true });
+});
+app.get('/api/admin/leads', auth, admin, (req, res) => res.json((loadDB().leads || []).sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))));
+app.put('/api/leads/:id', auth, admin, (req, res) => {
+  const l = (loadDB().leads || []).find(x => x.id === req.params.id);
+  if (!l) return res.status(404).json({ error: 'Lead não encontrado' });
+  if (req.body.status) l.status = req.body.status;
+  saveDB(); res.json({ ok: true });
+});
 app.post('/api/orders', auth, async (req, res) => {
   const db = loadDB();
   let { items = [], address, shippingType = 'PAC', shippingLabel = null, paymentMethod = 'pix', coupon = null, art = null, pointsUsed = 0, card = null, installments = 1 } = req.body;
@@ -783,6 +800,8 @@ app.post('/api/orders', auth, async (req, res) => {
     createdAt: new Date().toISOString(),
   };
   if (art && art.url) order.timeline.unshift({ status: 'aguardando_arte', at: new Date().toISOString() });
+  const _lead = (db.leads || []).find(l => l.email.toLowerCase() === String((buyer && buyer.email) || '').toLowerCase() && l.status === 'open');
+  if (_lead) _lead.status = 'converted';
   db.orders.push(order); saveDB();
   if (paymentMethod === 'infinitepay') {
     if (!infpayActive()) paymentError = 'InfinitePay não configurada';
@@ -1034,6 +1053,31 @@ app.post('/api/pay/mp-preference', auth, async (req, res) => {
     res.json({ init_point: data.init_point || data.sandbox_init_point });
   } catch (e) { res.status(500).json({ error: 'Erro ao conectar no Mercado Pago' }); }
 });
+app.post('/api/pay/mp-pix', auth, async (req, res) => {
+  const tk = mpToken();
+  const c = loadDB().config;
+  if (!tk || !(c.mpEnabled || process.env.MP_ACCESS_TOKEN)) return res.status(400).json({ error: 'not-configured' });
+  const o = loadDB().orders.find(x => x.id === req.body.orderId && x.userId === req.user.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (o.payment.status === 'paid') return res.json({ paid: true });
+  if (o.payment.mpPixQr) return res.json({ qr: o.payment.mpPixQr, copy: o.payment.mpPixCopy, mpId: o.payment.mpPixId });
+  try {
+    const base = (loadDB().config.publicUrl || process.env.PUBLIC_URL || '').replace(/\/$/, '');
+    const r = await fetch('https://api.mercadopago.com/v1/payments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + tk, 'X-Idempotency-Key': o.id },
+      body: JSON.stringify({ transaction_amount: Number(o.total.toFixed(2)), payment_method_id: 'pix', description: ('Pedido ' + o.code + ' PrimePrint').slice(0, 120), payer: { email: req.user.email }, external_reference: o.id, notification_url: base ? base + '/api/pay/mp-webhook' : undefined }),
+    });
+    const data = await r.json().catch(() => ({}));
+    const txn = data.point_of_interaction && data.point_of_interaction.transaction_data;
+    if (!r.ok || !txn) return res.status(400).json({ error: (data && data.message) || 'Falha ao gerar Pix' });
+    o.payment.mpPixId = String(data.id);
+    o.payment.mpPixQr = txn.qr_code_base64;
+    o.payment.mpPixCopy = txn.qr_code;
+    saveDB();
+    res.json({ qr: o.payment.mpPixQr, copy: o.payment.mpPixCopy, mpId: o.payment.mpPixId });
+  } catch (e) { res.status(500).json({ error: 'Erro ao conectar no Mercado Pago' }); }
+});
 app.post('/api/pay/mp-webhook', async (req, res) => {
   try {
     const topic = req.query.topic || (req.body && req.body.type);
@@ -1137,6 +1181,18 @@ app.get('/api/orders/code/:code/payment-check', auth, async (req, res) => {
   const o = loadDB().orders.find(x => x.code === req.params.code);
   if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
   if (req.user.role !== 'admin' && o.userId !== req.user.id) return res.status(403).json({ error: 'Sem acesso' });
+  if (o.payment.mpPixId && o.payment.status !== 'paid' && mpToken()) {
+    try {
+      const r = await fetch(`https://api.mercadopago.com/v1/payments/${o.payment.mpPixId}`, { headers: { Authorization: 'Bearer ' + mpToken() } });
+      const pay = await r.json().catch(() => ({}));
+      if (pay.status === 'approved') {
+        o.payment.status = 'paid'; o.payment.mpId = String(pay.id);
+        o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Pagamento aprovado (Pix Mercado Pago)' });
+        saveDB();
+        notifyPaid(o);
+      }
+    } catch {}
+  }
   if (o.payment.method !== 'infinitepay' || o.payment.status === 'paid') return res.json({ paid: o.payment.status === 'paid' });
   if (req.query.slug) o.payment.slug = String(req.query.slug).slice(0, 80);
   if (req.query.transaction_nsu) o.payment.transactionNsu = String(req.query.transaction_nsu).slice(0, 80);
@@ -1159,6 +1215,19 @@ app.post('/api/webhooks/infinitepay', async (req, res) => {
     try { await infpayCheck(o, { transaction_nsu: b.transaction_nsu, slug: b.invoice_slug }); } catch {}
     res.json({ success: true, message: null });
   } catch { res.status(400).json({ success: false }); }
+});
+app.post('/api/orders/:id/review-bonus', auth, (req, res) => {
+  const db = loadDB();
+  const o = db.orders.find(x => x.id === req.params.id);
+  if (!o) return res.status(404).json({ error: 'Pedido não encontrado' });
+  if (o.userId !== req.user.id) return res.status(403).json({ error: 'Sem acesso' });
+  if (o.status !== 'entregue') return res.status(400).json({ error: 'Só após a entrega' });
+  if (o.reviewBonus) return res.status(400).json({ error: 'Bônus já resgatado' });
+  const u = db.users.find(x => x.id === o.userId);
+  o.reviewBonus = true;
+  if (u) u.points = (u.points || 0) + 10;
+  o.timeline.push({ status: o.status, at: new Date().toISOString(), note: 'Cliente avaliou (+10 pontos)' });
+  saveDB(); res.json({ ok: true, points: u ? u.points : 0 });
 });
 app.post('/api/orders/:id/notify-payment', auth, (req, res) => {
   const o = loadDB().orders.find(x => x.id === req.params.id);

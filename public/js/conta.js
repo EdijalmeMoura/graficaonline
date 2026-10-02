@@ -123,6 +123,7 @@ function viewOrderDetail(id) {
     <div class="grid2">
       <div class="panel"><h3>📍 Acompanhamento</h3>${timeline(o)}
         ${trackBlock(o)}
+        ${reviewBlock(o)}
         <p>📅 <b>Previsão de entrega:</b> ${shipETA(o)}</p>
         <h3 style="margin-top:16px">🧾 Itens</h3>${o.items.map(i => `<div class="mini"><div class="t" style="background:var(--navy)">${thumbHTML(i)}</div><div><b>${esc(i.name)}</b><span>${esc(i.config)}</span><span>${i.qty.toLocaleString('pt-BR')} un × ${BRL(i.unit)}</span>${o.status === 'entregue' ? ` <a class="link-more small" href="/produto.html?id=${i.productId}">⭐ Avaliar</a>` : ''}</div><b style="margin-left:auto">${BRL(i.total)}</b></div>`).join('')}
         <div class="totals" style="margin-top:10px"><div class="tt"><span>Subtotal</span><span>${BRL(o.subtotal)}</span></div>
@@ -144,11 +145,33 @@ function viewOrderDetail(id) {
       </div>
     </div>`;
 }
+function reviewBlock(o) {
+  if (o.status !== 'entregue') return '';
+  const g = CONFIG.googleReviewUrl;
+  return `<div style="background:#F0FDF4;border:1.5px solid #16A34A;border-radius:10px;padding:12px;margin:10px 0">⭐ <b>Como foi sua experiência?</b><br><span class="small mut">Sua opinião ajuda muito a PrimePrint!</span><br><br>${(o.items || []).slice(0, 3).map(i => `<a class="btn sm ghost" href="/produto.html?id=${i.productId}">Avaliar ${esc(i.name)}</a>`).join(' ')}${g ? ` <a class="btn sm navy" target="_blank" href="${g}">⭐ Avaliar no Google</a>` : ''}${o.reviewBonus ? '<br><span class="small" style="color:var(--ok)">🎁 Bônus resgatado. Obrigado!</span>' : `<br><button class="btn sm ok" style="margin-top:8px" onclick="claimReview('${o.id}')">🎁 Já avaliei — resgatar 10 pontos</button>`}</div>`;
+}
+async function claimReview(id) {
+  try {
+    const r = await api(`/api/orders/${id}/review-bonus`, { method: 'POST' });
+    const me = await api('/api/auth/me'); Auth.set({ token: Auth.token, user: me });
+    toast(`10 pontos resgatados! 🎁 (saldo: ${r.points})`, 'ok');
+    ORDERS = await api('/api/orders'); viewOrderDetail(id);
+  } catch (e) { toast(e.message, 'err'); }
+}
 function payActions(o) {
   if (o.payment.status === 'paid' || o.status === 'cancelado') return '';
   if (o.payment.method === 'infinitepay') return `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin:10px 0">♾️ <b>Pagamento pendente</b> — Pix ou cartão no checkout seguro.<br><br><button class="btn sm" onclick="payNow('${o.id}')">Pagar agora →</button> <button class="btn sm navy" onclick="checkPaid('${o.code}')">Já paguei, verificar 🔄</button></div>`;
-  if (o.payment.method === 'pix' && CONFIG.pixKey) return `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin:10px 0">⚡ <b>Aguardando Pix de ${BRL(o.total)}</b><br><span class="small mut">Chave (${esc(CONFIG.pixName || 'PrimePrint')}):</span> <span class="mono small" id="ct-pixkey">${esc(CONFIG.pixKey)}</span> <button class="btn sm navy" onclick="navigator.clipboard?.writeText(document.querySelector('#ct-pixkey').textContent);toast('Chave copiada!','ok')">Copiar</button><br><br>${o.payment.notified ? '<span class="small">✅ Você já avisou — estamos confirmando!</span>' : `<button class="btn sm ok" onclick="notifyPaidCt('${o.id}')">Já paguei ✅</button>`}</div>`;
+  if (o.payment.method === 'pix' && CONFIG.pixKey) return `<div style="background:#FFF7ED;border:1.5px solid #F59E0B;border-radius:10px;padding:12px;margin:10px 0">⚡ <b>Aguardando Pix de ${BRL(o.total)}</b><br><span class="small mut">Chave (${esc(CONFIG.pixName || 'PrimePrint')}):</span> <span class="mono small" id="ct-pixkey">${esc(CONFIG.pixKey)}</span> <button class="btn sm navy" onclick="navigator.clipboard?.writeText(document.querySelector('#ct-pixkey').textContent);toast('Chave copiada!','ok')">Copiar</button> <button class="btn sm" onclick="mpPixCt('${o.id}')">⚡ QR automático</button><br><br>${o.payment.notified ? '<span class="small">✅ Você já avisou — estamos confirmando!</span>' : `<button class="btn sm ok" onclick="notifyPaidCt('${o.id}')">Já paguei ✅</button>`}</div>`;
   return '';
+}
+async function mpPixCt(id) {
+  try {
+    toast('Gerando QR Pix... ⚡');
+    const mp = await api('/api/pay/mp-pix', { method: 'POST', body: JSON.stringify({ orderId: id }) });
+    const o = ORDERS.find(x => x.id === id);
+    if (mp.paid) { toast('Pagamento confirmado! 🎉', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id); return; }
+    openModal(`<div style="text-align:center"><h2>⚡ Pix de ${BRL(o?.total || 0)}</h2><img src="data:image/png;base64,${mp.qr}" style="max-width:230px;border-radius:12px"><p style="margin-top:10px"><button class="btn navy sm" onclick="navigator.clipboard?.writeText(document.querySelector('#ctcopy').textContent);toast('Código copiado!','ok')">📋 Copiar código</button> <button class="btn ok sm" onclick="checkPaid('${o?.code}')">Verificar 🔄</button></p><p class="mono small mut" id="ctcopy" style="word-break:break-all">${mp.copy}</p></div>`);
+  } catch { toast('Pix automático indisponível no momento', 'err'); }
 }
 async function payNow(id) {
   try { toast('Gerando link de pagamento... ♾️'); const r = await api(`/api/orders/${id}/pay-link`, { method: 'POST' }); location.href = r.paymentUrl; }

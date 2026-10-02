@@ -23,6 +23,7 @@ function renderSide(active, badges = {}) {
       <a href="#/avaliacoes" class="${active === 'avaliacoes' ? 'on' : ''}">⭐ Avaliações</a>
       <a href="#/clientes" class="${active === 'clientes' ? 'on' : ''}">👥 Clientes</a>
       <a href="#/cupons" class="${active === 'cupons' ? 'on' : ''}">🎟️ Cupons</a>
+      <a href="#/leads" class="${active === 'leads' ? 'on' : ''}">🛒 Carrinhos</a>
       <a href="#/pagamentos" class="${active === 'pagamentos' ? 'on' : ''}">💳 Pagamentos</a>
       <a href="#/banners" class="${active === 'banners' ? 'on' : ''}">🖼️ Banners</a>
       <a href="#/vitrine" class="${active === 'vitrine' ? 'on' : ''}">🌟 Vitrine</a>
@@ -51,6 +52,7 @@ async function route() {
     if (path === 'avaliacoes') return viewReviews();
     if (path === 'clientes') return viewCustomers();
     if (path === 'cupons') return viewCoupons();
+    if (path === 'leads') return viewLeads();
     if (path === 'pagamentos') return viewPayments();
     if (path === 'banners') return viewBanners();
     if (path === 'vitrine') return viewVitrine();
@@ -119,7 +121,7 @@ function viewOrderDetail(id) {
     <div class="grid2">
       <div class="panel"><h3>🔄 Alterar status</h3>
         <div style="display:flex;gap:8px;flex-wrap:wrap"><select class="inp" id="nstatus" style="flex:1">${nexts.map(s => `<option value="${s}">${STATUS[s]}</option>`).join('')}</select>
-        <button class="btn" onclick="setStatus('${o.id}')">Atualizar</button> <button class="btn navy" onclick="waStatus('${o.id}')">📲 Avisar cliente</button></div>
+        <button class="btn" onclick="setStatus('${o.id}')">Atualizar</button> <button class="btn navy" onclick="waStatus('${o.id}')">📲 Avisar cliente</button> <label class="small" style="align-self:center;white-space:nowrap"><input type="checkbox" id="waauto" checked> auto-avisar 📲</label></div>
         <div style="margin-top:10px"><label class="lbl">🚚 Código de rastreio</label><div style="display:flex;gap:8px"><input class="inp" id="ntrack" value="${esc(o.tracking || '')}" placeholder="BR...BR"><button class="btn navy sm" onclick="setStatus('${o.id}',true)">Salvar</button></div></div>
         <div style="margin-top:10px"><label class="lbl">📝 Observação interna</label><input class="inp" id="nnote" placeholder="Ex: cliente avisado no WhatsApp"></div>
         ${mePanel(o)}
@@ -142,9 +144,9 @@ function viewOrderDetail(id) {
     </div>`;
 }
 function waNum(p) { const d = String(p || '').replace(/\D/g, ''); if (!d) return ''; return d.length <= 11 ? '55' + d : d; }
-function waStatus(id) {
+function waStatus(id, forceSt) {
   const o = ORDERS.find(x => x.id === id);
-  const st = document.querySelector('#nstatus')?.value || o.status;
+  const st = forceSt || document.querySelector('#nstatus')?.value || o.status;
   const num = waNum(o.customer?.phone);
   if (!num) { toast('Cliente sem telefone cadastrado', 'err'); return; }
   window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(`Olá ${o.customer?.name || ''}! Atualização do pedido ${o.code} (${CONFIG.storeName || ''}): ${STATUS[st]}${o.tracking ? ' • Rastreio: ' + o.tracking : ''}. Acompanhe: ${location.origin}/conta.html#/pedidos`), '_blank');
@@ -158,7 +160,9 @@ function waCobrar(id) {
 async function setStatus(id, onlyTrack) {
   const status = $('#nstatus')?.value || ORDERS.find(o => o.id === id).status;
   await api(`/api/orders/${id}/status`, { method: 'PUT', body: JSON.stringify({ status: onlyTrack ? ORDERS.find(o => o.id === id).status : status, tracking: $('#ntrack').value, note: $('#nnote')?.value || '' }) });
+  const _wa = document.querySelector('#waauto')?.checked; const _newSt = onlyTrack ? ORDERS.find(o => o.id === id).status : status;
   toast('Pedido atualizado! ✅', 'ok'); ORDERS = await api('/api/orders'); viewOrderDetail(id);
+  if (_wa && !onlyTrack) waStatus(id, _newSt);
 }
 async function reviewArt(id, approved) {
   const feedback = $('#art-fb')?.value || '';
@@ -370,6 +374,25 @@ async function viewCustomers() {
 async function toggleCustomer(id, active) { await api(`/api/admin/customers/${id}`, { method: 'PUT', body: JSON.stringify({ active }) }); viewCustomers(); }
 
 /* ---------- CUPONS ---------- */
+async function viewLeads() {
+  const list = await api('/api/admin/leads');
+  const open = list.filter(l => l.status === 'open');
+  $('#view').innerHTML = `<div class="main-hd"><div><h1>🛒 Carrinhos abandonados</h1><p>${open.length} aguardando recuperação</p></div></div>
+  <div class="panel"><div style="overflow:auto"><table class="tbl"><tr><th>Cliente</th><th>Itens</th><th>Total</th><th>Quando</th><th>Status</th><th></th></tr>
+  ${list.map(l => `<tr><td><b>${esc(l.name || '—')}</b><br><span class="small mut">${esc(l.email)}</span>${l.phone ? `<br><span class="small">${esc(l.phone)}</span>` : ''}</td>
+  <td class="small">${(l.items || []).map(i => esc(i.name)).join('<br>') || '—'}</td><td><b>${BRL(l.total || 0)}</b></td><td class="small">${fmtDT(l.updatedAt)}</td>
+  <td>${l.status === 'open' ? '<span class="badge sale">⏳ aberto</span>' : l.status === 'contacted' ? '<span class="badge">📲 contatado</span>' : '<span class="badge ok">✅ convertido</span>'}</td>
+  <td style="white-space:nowrap">${l.status === 'open' ? `<button class="btn sm navy" onclick="waRecover('${l.id}')">📲 Recuperar</button> <button class="btn sm ghost" onclick="leadDone('${l.id}')">✅</button>` : ''}</td></tr>`).join('') || '<tr><td colspan="6" class="mut">Nenhum carrinho abandonado 🎉</td></tr>'}</table></div></div>`;
+  window._leads = list;
+}
+function waRecover(id) {
+  const l = (window._leads || []).find(x => x.id === id);
+  const num = waNum(l?.phone);
+  if (!num) { toast('Lead sem telefone', 'err'); return; }
+  window.open('https://wa.me/' + num + '?text=' + encodeURIComponent(`Olá ${l.name || ''}! Aqui é da ${CONFIG.storeName || 'PrimePrint'} 🖨️ Vi que você montou um pedido de ${BRL(l.total || 0)} e não finalizou. Posso ajudar? Use VOLTA10 e ganhe 10% OFF 👉 ${location.origin}/checkout.html`), '_blank');
+  api(`/api/leads/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'contacted' }) }).then(() => viewLeads());
+}
+async function leadDone(id) { await api(`/api/leads/${id}`, { method: 'PUT', body: JSON.stringify({ status: 'converted' }) }); viewLeads(); }
 async function viewCoupons() {
   const list = await api('/api/coupons');
   $('#view').innerHTML = `<div class="main-hd"><div><h1>🎟️ Cupons</h1></div><button class="btn" style="margin-left:auto" onclick="editCoupon()">＋ Novo cupom</button></div>
@@ -832,6 +855,7 @@ async function viewConfig() {
   $('#view').innerHTML = `<div class="main-hd"><div><h1>⚙️ Configurações</h1><p>Dados da loja e frete • pagamento em <a class="link-more" href="#/pagamentos">💳 Pagamentos</a></p></div></div>
   <div class="panel"><form onsubmit="saveConfig(event)" style="max-width:640px">
     <div class="row2"><div><label class="lbl">Nome da loja</label><input class="inp" name="storeName" value="${esc(c.storeName)}"></div><div><label class="lbl">Telefone</label><input class="inp" name="phone" value="${esc(c.phone)}"></div></div>
+    <div style="margin-top:8px"><label class="lbl">⭐ Link "Avalie no Google" (perfil da empresa → Compartilhar)</label><input class="inp" name="googleReviewUrl" value="${esc(c.googleReviewUrl || '')}" placeholder="https://g.page/..."></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">E-mail</label><input class="inp" name="email" value="${esc(c.email)}"></div><div><label class="lbl">WhatsApp (só números)</label><input class="inp" name="whatsapp" value="${esc(c.whatsapp)}"></div></div>
     <div style="margin-top:8px"><label class="lbl">Horário de atendimento</label><input class="inp" name="hours" value="${esc(c.hours)}"></div>
     <div class="row2" style="margin-top:8px"><div><label class="lbl">Frete PAC (R$)</label><input class="inp" name="shipPAC" type="number" step="0.01" value="${c.shipPAC}"></div><div><label class="lbl">Frete SEDEX (R$)</label><input class="inp" name="shipSEDEX" type="number" step="0.01" value="${c.shipSEDEX}"></div></div>
@@ -868,7 +892,7 @@ async function viewConfig() {
 }
 async function saveConfig(e) {
   e.preventDefault(); const f = e.target;
-  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, meSandbox: f.meSandbox.checked, meName: f.meName.value, mePhone: f.mePhone.value, meEmail: f.meEmail.value, meDoc: f.meDoc.value.replace(/\D/g, ''), meStreet: f.meStreet.value, meNumber: f.meNumber.value, meDistrict: f.meDistrict.value, meCity: f.meCity.value, meState: f.meState.value.toUpperCase(), meIE: f.meIE.value, themePrimary: f.themePrimary.value, themePrimary2: f.themePrimary2.value, themeNavy: f.themeNavy.value, themeNavy2: f.themeNavy2.value, themeBg: f.themeBg.value, monthlyGoal: Number(f.monthlyGoal.value) || 0, mailEnabled: f.mailEnabled.checked, smtpHost: f.smtpHost.value.trim(), smtpPort: Number(f.smtpPort.value) || 587, smtpUser: f.smtpUser.value.trim(), smtpFrom: f.smtpFrom.value.trim() }) });
+  CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ storeName: f.storeName.value, phone: f.phone.value, email: f.email.value, whatsapp: f.whatsapp.value, hours: f.hours.value, shipPAC: Number(f.shipPAC.value), shipSEDEX: Number(f.shipSEDEX.value), freeShipFrom: Number(f.freeShipFrom.value), shipOriginZip: f.shipOriginZip.value.trim(), pkgWeight: Number(f.pkgWeight.value) || 1, pkgWidth: Number(f.pkgWidth.value) || 20, pkgHeight: Number(f.pkgHeight.value) || 10, pkgLength: Number(f.pkgLength.value) || 30, meEnabled: f.meEnabled.checked, meSandbox: f.meSandbox.checked, meName: f.meName.value, mePhone: f.mePhone.value, meEmail: f.meEmail.value, meDoc: f.meDoc.value.replace(/\D/g, ''), meStreet: f.meStreet.value, meNumber: f.meNumber.value, meDistrict: f.meDistrict.value, meCity: f.meCity.value, meState: f.meState.value.toUpperCase(), meIE: f.meIE.value, themePrimary: f.themePrimary.value, themePrimary2: f.themePrimary2.value, themeNavy: f.themeNavy.value, themeNavy2: f.themeNavy2.value, themeBg: f.themeBg.value, googleReviewUrl: f.googleReviewUrl.value.trim(), monthlyGoal: Number(f.monthlyGoal.value) || 0, mailEnabled: f.mailEnabled.checked, smtpHost: f.smtpHost.value.trim(), smtpPort: Number(f.smtpPort.value) || 587, smtpUser: f.smtpUser.value.trim(), smtpFrom: f.smtpFrom.value.trim() }) });
   if (f.meToken.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ meToken: f.meToken.value.trim() }) });
   if (f.smtpPass.value.trim()) CONFIG = await api('/api/config', { method: 'PUT', body: JSON.stringify({ smtpPass: f.smtpPass.value.trim() }) });
   toast('Configurações salvas! ⚙️', 'ok');

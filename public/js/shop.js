@@ -279,6 +279,7 @@ async function pageCheckout() {
   const me = await api('/api/auth/me');
   Auth.set({ token: Auth.token, user: me });
   renderCkAddresses(me.addresses || []);
+  saveLead(me);
   try { CK._payStatus = await api('/api/pay/status'); } catch { CK._payStatus = {}; }
   renderCkPay();
   renderCkShip(); ckQuote();
@@ -414,6 +415,35 @@ function ckApplyPoints() {
   ckTotals();
   toast(CK.pointsUsed ? CK.pointsUsed + ' pontos aplicados! 🎁' : 'Pontos removidos', 'ok');
 }
+async function showMpPix(order) {
+  let mp = null;
+  try { mp = await api('/api/pay/mp-pix', { method: 'POST', body: JSON.stringify({ orderId: order.id }) }); } catch { return false; }
+  if (!mp || (!mp.qr && !mp.paid)) return false;
+  if (mp.paid) { toast('Pagamento aprovado! 🎉', 'ok'); location.href = '/conta.html#/pedidos'; return true; }
+  openModal(`<div style="text-align:center;padding:10px"><h2>⚡ Pague no Pix</h2><p>Pedido <b>${order.code}</b> • Total: <b>${BRL(order.total)}</b></p>
+    <img src="data:image/png;base64,${mp.qr}" style="max-width:230px;border-radius:12px;border:1px solid var(--line)">
+    <p style="margin-top:10px"><button class="btn navy" onclick="navigator.clipboard?.writeText(document.querySelector('#pixcopy').textContent);toast('Código copiado!','ok')">📋 Copiar código</button> <button class="btn ok" onclick="pollPix('${order.code}')">Já paguei, verificar 🔄</button></p>
+    <p class="mono small mut" id="pixcopy" style="word-break:break-all;background:var(--bg);padding:8px;border-radius:8px">${mp.copy}</p>
+    <p class="small mut">Confirmação automática após o pagamento ⚡</p>
+    <a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
+  return true;
+}
+async function pollPix(code) {
+  try {
+    toast('Verificando pagamento... 🔄');
+    const r = await api(`/api/orders/code/${code}/payment-check`);
+    if (r.paid) { toast('Pagamento confirmado! 🎉', 'ok'); location.href = '/conta.html#/pedidos'; }
+    else toast('Ainda não identificamos — aguarde e tente de novo', 'err');
+  } catch (e) { toast(e.message, 'err'); }
+}
+let _leadAt = 0;
+async function saveLead(me) {
+  try {
+    if (Date.now() - _leadAt < 30000 || !Cart.items.length) return;
+    _leadAt = Date.now();
+    await api('/api/leads', { method: 'POST', body: JSON.stringify({ email: me.email || Auth.user?.email, name: me.name || Auth.user?.name, phone: me.phone || '', items: Cart.items.map(i => ({ name: i.name, total: i.total })), total: Cart.subtotal() }) });
+  } catch {}
+}
 async function ckFinish() {
   const pickup = CK.shipType === 'Retirada';
   if (!pickup && !CK.addressId) { toast('Cadastre/selecione o endereço de entrega', 'err'); return; }
@@ -446,7 +476,7 @@ async function ckFinish() {
         return;
       }
     } catch (e) { console.warn('MP indisponível, usando simulação:', e.message); }
-    if (CK.pay === 'pix') openModal(`<div style="text-align:center;padding:10px"><h2>⚡ Pague no Pix</h2><p>Pedido <b>${order.code}</b> criado! Total: <b>${BRL(order.total)}</b></p>
+    if (CK.pay === 'pix' && !(await showMpPix(order))) openModal(`<div style="text-align:center;padding:10px"><h2>⚡ Pague no Pix</h2><p>Pedido <b>${order.code}</b> criado! Total: <b>${BRL(order.total)}</b></p>
       ${CONFIG.pixKey ? `<div style="font-size:70px">📱</div><p class="small mut">Chave Pix (${esc(CONFIG.pixName || 'PrimePrint')}):</p><p class="mono" id="pixkey" style="background:var(--bg);padding:10px;border-radius:8px;font-size:13px;word-break:break-all">${esc(CONFIG.pixKey)}</p><button class="btn navy" onclick="navigator.clipboard?.writeText(document.querySelector('#pixkey').textContent);toast('Chave copiada!','ok')">📋 Copiar chave</button> <button class="btn ok" onclick="notifyPaid('${order.id}')">Já paguei ✅</button><p class="small mut" style="margin-top:8px">Após pagar, toque em "Já paguei" — confirmamos rapidinho 😉</p>` : `<p class="mut">Nossa chave Pix estará disponível em instantes — acompanhe seu pedido 👇</p>`}
       <a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
     else if (CK.pay === 'boleto') openModal(`<div style="text-align:center;padding:10px"><h2>🧾 Boleto gerado</h2><p>Pedido <b>${order.code}</b> • Total: <b>${BRL(order.total)}</b></p><div style="font-size:70px;letter-spacing:2px">||||| |||| |||</div><p class="mono small">34191.79001 01043.510047 91020.150008 9 999900000${String(Math.round(order.total * 100)).padStart(8, '0')}</p><a class="btn big block" href="/conta.html#/pedidos">Acompanhar meu pedido →</a></div>`);
